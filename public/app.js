@@ -1131,12 +1131,12 @@ document.addEventListener("click", async (e) => {
     case "record": startRecording(el.dataset.week || sel); break;
     case "recStop": stopRecording(); break;
     case "summarize": summarizeInto(el.dataset.week, el); break;
-    case "iam": me = el.dataset.id; store.set("sohbet.me", me); render(); toast(`Selam, ${nameOf(me)}!`); break;
+    case "iam": me = el.dataset.id; store.set("sohbet.me", me); render(); toast(`Selam, ${nameOf(me)}!`); showWelcomeHadith(); break;
     case "join":
       try {
         const r = await api({ type: "addMember", name: el.dataset.name });
         me = r.id; store.set("sohbet.me", me); render();
-        toast(`Hoş geldin, ${el.dataset.name}!`);
+        toast(`Hoş geldin, ${el.dataset.name}!`); showWelcomeHadith();
       } catch (err) { toast(err.message); }
       break;
     case "switch":
@@ -1306,17 +1306,17 @@ function showWelcomeHadith() {
   const close = () => { if (done) return; done = true; el.classList.add("out"); setTimeout(() => el.remove(), 300); };
   el.addEventListener("click", close);
   setTimeout(close, 5000);
-  document.addEventListener("keydown", function k(e) { if (e.key === "Escape" || e.key === "Enter") { close(); document.removeEventListener("keydown", k); } });
+  document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", k); } });
   document.body.appendChild(el);
 }
 
 /* ---------- boot ---------- */
 (async () => {
-  showWelcomeHadith();
   try {
     await api();
     if (!S.state.settings.tz) await api({ type: "init", tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
     render();
+    if (me && member(me)) showWelcomeHadith(); // only once someone has picked their name
   } catch (e) { showError(e.message); }
   setInterval(() => { if (!$("#sheet-root").innerHTML && document.visibilityState === "visible") refresh(); }, 30000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !$("#sheet-root").innerHTML) refresh(); });
