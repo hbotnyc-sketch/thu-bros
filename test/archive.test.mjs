@@ -77,5 +77,14 @@ await t("private notes: only the part's owner can read/write, stored per person"
   assert.equal((await call(`/api/private?week=${wk}&part=sunum&actor=nobody`)).status, 401);
   assert.ok(!JSON.stringify(state).includes("gizli not"), "never in the shared state");
 });
+await t("personal notebook: per member, per week, private", async () => {
+  await call(`/api/mynotes?actor=${me}&week=${wk}`, { method: "POST", body: "benim notum" });
+  await call(`/api/mynotes?actor=other&week=${wk}`, { method: "POST", body: "onun notu" });
+  assert.deepEqual((await call(`/api/mynotes?actor=${me}`)).body.notes, { [wk]: "benim notum" });
+  assert.deepEqual((await call(`/api/mynotes?actor=other`)).body.notes, { [wk]: "onun notu" });
+  assert.equal((await call(`/api/mynotes?actor=nobody`)).status, 401);
+  await call(`/api/mynotes?actor=${me}&week=${wk}`, { method: "POST", body: "" });
+  assert.deepEqual((await call(`/api/mynotes?actor=${me}`)).body.notes, {});
+});
 assert.throws(() => parseSummary("no json here"));
 console.log(`\n${pass} archive tests passed`);

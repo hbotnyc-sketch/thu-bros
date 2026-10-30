@@ -199,7 +199,7 @@ function render() {
       <div class="brand">${logo()}<span class="wordmark">Thursday Bros</span></div>
       <button class="icon-btn" data-a="share" title="Share this week" aria-label="Share this week">${ic("share")}</button>
       <button class="icon-btn" data-a="members" title="Members & settings" aria-label="Members and settings">${ic("users")}</button>
-      <button class="avatar" data-a="switch" title="${esc(nameOf(me))} — switch" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
+      <button class="avatar" data-a="profile" title="${esc(nameOf(me))} — profile & my notes" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
     </div></header>
     <main class="wrap">
       ${renderHostPrompt()}
@@ -559,6 +559,7 @@ function renderRecapCard(w) {
     : `<p class="empty">During or after the sohbet: record it, upload audio, paste a transcript, or type notes. It all goes into Geçmiş sohbetler.</p>
       <div class="row"><button class="btn filled" data-a="record" data-week="${w.id}">${ic("rec")} Record sohbet</button>
       <button class="btn tonal" data-a="recap" data-week="${w.id}">${ic("notes")} Add notes</button></div>`}
+    <button class="btn text small my-nb" data-a="profile" data-week="${w.id}">${ic("lock")} My personal notes</button>
   </section>`;
 }
 
@@ -678,6 +679,53 @@ function confirmHostSheet(w) {
     toast(updating ? "Saved" : "Jazakallah — you're hosting!");
   });
 }
+
+async function profileSheet(focusWeek) {
+  const m = member(me);
+  let notes = {};
+  try { notes = (await apiX(`/api/mynotes?actor=${me}`)).notes || {}; } catch (e) { toast(e.message); }
+  const wk = focusWeek || S.currentWeekId;
+  const past = Object.keys(notes).filter((id) => id !== wk).sort().reverse();
+  const noteBox = (id, open) => `<details class="nb" data-week="${id}" ${open ? "open" : ""}>
+      <summary><span class="d">${esc(fmtDate(id, { weekday: "short", month: "short", day: "numeric", year: id.slice(0, 4) !== String(new Date().getFullYear()) ? "numeric" : undefined }))}</span>
+        <span class="small muted p">${esc(S.state.weeks[id] ? weekTitle(S.state.weeks[id]) : "")}</span></summary>
+      <textarea data-nb="${id}" rows="${open ? 9 : 6}" maxlength="20000" placeholder="Write anything: what stuck with you, ayetler, questions, dua…">${esc(notes[id] || "")}</textarea>
+      <div class="small muted nb-status" data-for="${id}"></div></details>`;
+  openSheet({
+    title: "Profile",
+    action: null,
+    body: `
+    <div class="prof">${avatar(me, "lg")}<div><div class="who" style="font-size:18px;font-weight:500">${esc(m.name)}</div>
+      <div class="small muted">${m.phone ? esc(m.phone) : "No WhatsApp number"}${m.address ? " · " + esc(m.address) : ""}</div></div></div>
+
+    <div class="section-lbl">${ic("lock")} My notes <span class="muted" style="font-weight:400">· only you can see these</span></div>
+    ${noteBox(wk, true)}
+    ${past.length ? `<div class="section-lbl" style="margin-top:18px">Earlier</div>${past.map((id) => noteBox(id, false)).join("")}` : ""}
+
+    <div class="section-lbl" style="margin-top:22px">My details</div>
+    <label class="field"><span>WhatsApp number</span><input type="tel" id="pf-phone" value="${esc(m.phone)}" placeholder="+1 555 123 4567" /></label>
+    <label class="field"><span>Home address <i>for hosting</i></span><input type="text" id="pf-addr" value="${esc(m.address)}" placeholder="Street, city" /></label>
+    <div class="row" style="justify-content:space-between">
+      <button type="button" class="btn tonal" data-a="pfSave">Save details</button>
+      <button type="button" class="btn text" data-a="switch">Switch user</button>
+    </div>`,
+  });
+}
+const nbTimers = {};
+async function saveNote(id, text) {
+  const st = document.querySelector(`.nb-status[data-for="${id}"]`);
+  if (st) st.textContent = "Saving…";
+  try {
+    await apiX(`/api/mynotes?actor=${me}&week=${id}`, { method: "POST", body: text });
+    if (st) st.textContent = "Saved ✓";
+  } catch (e) { if (st) st.textContent = e.message; }
+}
+document.addEventListener("input", (e) => {
+  const id = e.target.dataset?.nb; if (!id) return;
+  const st = document.querySelector(`.nb-status[data-for="${id}"]`); if (st) st.textContent = "…";
+  clearTimeout(nbTimers[id]);
+  nbTimers[id] = setTimeout(() => saveNote(id, e.target.value), 1200);
+});
 
 function rotaSheet() {
   const rows = S.rotaPreview.filter((x) => x.host);
@@ -1124,6 +1172,7 @@ document.addEventListener("click", async (e) => {
   const w = S && sel ? W() : null;
   switch (a) {
     case "close":
+      for (const [id, t] of Object.entries(nbTimers)) { clearTimeout(t); delete nbTimers[id]; const ta = document.querySelector(`[data-nb="${id}"]`); if (ta) saveNote(id, ta.value); }
       if (activeRec) { if (confirm("Stop recording?")) stopRecording(); break; }
       closeSheet(); break;
     case "detail": openDetail(el.dataset.week); break;
@@ -1138,6 +1187,11 @@ document.addEventListener("click", async (e) => {
         me = r.id; store.set("sohbet.me", me); render();
         toast(`Hoş geldin, ${el.dataset.name}!`); showWelcomeHadith();
       } catch (err) { toast(err.message); }
+      break;
+    case "profile": profileSheet(el.dataset.week); break;
+    case "pfSave":
+      await act("updateMember", { id: me, phone: $("#pf-phone").value, address: $("#pf-addr").value }).catch(() => {});
+      toast("Saved"); profileSheet();
       break;
     case "switch":
       if (confirm(`You're ${nameOf(me)}. Switch to a different name?`)) { me = null; store.set("sohbet.me", null); render(); }
