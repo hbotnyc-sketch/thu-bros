@@ -572,7 +572,7 @@ function renderKonu(w) {
     ${k.summary ? `<p class="notes" style="margin-top:8px">${esc(k.summary)}</p>` : ""}
     ${k.notes ? `<div class="notes-box"><div class="lbl">Prep notes · skim before sohbet</div>${clampBlock("k" + w.id, k.notes)}
       ${mine ? `<button class="btn text small move-priv" data-a="toPrivate" data-part="sunum" data-week="${w.id}">${ic("lock")} Move to My notes</button>` : ""}</div>` : ""}
-    ${k.link ? `<div class="actions"><a class="btn outlined" href="${esc(k.link)}" target="_blank" rel="noopener">${ic("link")} Open link</a></div>` : ""}
+    ${k.link ? `<div class="actions"><a class="btn outlined" href="${esc(k.link)}" target="_blank" rel="noopener">${ic("link")} See the sunum resources</a></div>` : ""}
     ${mine ? `<div class="row actions">
       ${!k.notes ? `<button class="btn tonal" data-a="editKonu">${ic("plus")} Add notes for everyone</button>` : ""}
       <span class="spacer"></span><button class="btn text danger" data-a="release">Give up slot</button></div>
