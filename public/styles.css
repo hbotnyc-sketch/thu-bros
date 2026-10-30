@@ -610,3 +610,21 @@ button.avatar { position: relative; }
 .avatar.guest { background: var(--tertiary-container); color: var(--on-tertiary-container); }
 .wk .tick { display: inline-grid; place-items: center; color: var(--primary); }
 .wk .tick .ic { width: 15px; height: 15px; stroke-width: 3; }
+
+/* week tab host icon */
+.wk-host { display: inline-flex; align-items: center; gap: 3px; }
+.wk-host .ic { width: 12px; height: 12px; stroke-width: 2.2; flex: none; }
+
+/* attendance */
+.attend-link { display: flex; align-items: center; gap: 0; width: 100%; margin-top: 12px; padding: 6px 4px; border: 0; background: transparent; border-radius: 12px; cursor: pointer; text-align: left; color: inherit; flex-wrap: wrap; row-gap: 6px; }
+.attend-link:hover { background: var(--surface-2); }
+.attend-link .faces { margin: 0 14px 0 0; display: flex; }
+.attend-link .faces > span { margin-right: -6px; }
+.attend-link .faces .avatar { box-shadow: 0 0 0 2px var(--surface-1); }
+.attend-more { margin-left: auto; color: var(--primary); font-weight: 500; padding-left: 8px; }
+.att-sum { display: flex; gap: 8px; margin-bottom: 6px; }
+.att-sum span { flex: 1; text-align: center; background: var(--surface-1); border-radius: 12px; padding: 10px 4px; font-size: 13px; color: var(--on-surface-var); }
+.att-sum b { display: block; font-size: 22px; color: var(--on-surface); font-weight: 600; }
+.att-hr { border: 0; border-top: 1px solid var(--outline); margin: 18px 0 4px; }
+.nudge { color: var(--primary); }
+.hint .ic { width: 14px; height: 14px; vertical-align: -2px; }

@@ -421,7 +421,7 @@ function renderWeekTabs() {
     const h = hostOf(w);
     const sub = w.cancelled ? `<span class="small muted">No sohbet</span>` :
       `${h?.confirmed ? `<span class="tick" title="Host confirmed">${ic("check")}</span>` : ""}<span class="dot ${w.konu ? "full" : ""}" title="${w.konu ? "Sunum taken" : "Sunum still open"}"></span>
-       <span class="wk-host">${h ? esc(nameOf(h.id)) : "Host?"}</span>`;
+       <span class="wk-host">${ic("home")}${h ? esc(nameOf(h.id)) : "Host?"}</span>`;
     return `<button class="wk ${id === sel ? "sel" : ""}" data-a="week" data-id="${id}">
       <small>${label}</small><b>${fmtDate(id, { month: "short", day: "numeric" })}</b><span class="dots">${sub}</span></button>`;
   }).join("")}</nav>`;
@@ -613,8 +613,10 @@ function renderHost(w) {
         <button class="${mine === "yes" ? "on" : ""}" data-a="rsvp" data-v="yes" aria-pressed="${mine === "yes"}">${mine === "yes" ? ic("check") : ""}Geliyorum <b>${yes.length}</b></button>
         <button class="${mine === "no" ? "on no" : ""}" data-a="rsvp" data-v="no" aria-pressed="${mine === "no"}">${mine === "no" ? ic("check") : ""}Gelemiyorum <b>${no.length}</b></button>
       </div>
-      ${yes.length ? `<div class="faces">${yes.slice(0, 14).map((id) => `<span title="${esc(nameOf(id))}">${avatar(id, "sm")}</span>`).join("")}
-        <span class="small muted">${esc(yes.slice(0, 3).map(nameOf).join(", "))}${yes.length > 3 ? ` +${yes.length - 3}` : ""}</span></div>` : ""}
+      <button type="button" class="attend-link" data-a="attendance" data-week="${w.id}">
+        ${yes.length ? `<span class="faces">${yes.slice(0, 10).map((id) => `<span title="${esc(nameOf(id))}">${avatar(id, "sm")}</span>`).join("")}</span>
+          <span class="small">${esc(yes.slice(0, 3).map(nameOf).join(", "))}${yes.length > 3 ? ` +${yes.length - 3}` : ""}</span>` : `<span class="small muted">No one yet</span>`}
+        <span class="small attend-more">See who ›</span></button>
       ${no.length ? `<div class="small muted" style="margin-top:6px">Gelemiyor: ${esc(no.map(nameOf).join(", "))}</div>` : ""}
     </div>`}
   </section>`;
@@ -885,6 +887,26 @@ function feedbackSheet() {
     setTimeout(feedbackSheet, 0);
   });
   if (isOwner && list.some((f) => f.by !== me && f.at > seen)) act("seenFeedback").then(() => {}).catch(() => {});
+}
+
+function attendanceSheet(id) {
+  const w = S.state.weeks[id], r = w.rsvp || {};
+  const all = [...members()].sort((a, b) => a.name.localeCompare(b.name));
+  const yes = all.filter((m) => r[m.id] === "yes"), no = all.filter((m) => r[m.id] === "no"), none = all.filter((m) => !r[m.id]);
+  const row = (m, nudge) => `<li>${avatar(m.id, "sm")}<div class="grow">${esc(m.name)}${m.id === me ? ' <span class="muted small">(you)</span>' : ""}</div>
+    ${nudge && m.id !== me ? `<button type="button" class="icon-btn nudge" data-a="personShare" data-id="${m.id}" data-kind="rsvp" aria-label="Ask ${esc(m.name)} on WhatsApp" title="Ask on WhatsApp">${ic("chat")}</button>` : ""}</li>`;
+  openSheet({
+    title: `Who's coming · ${esc(shortDate(id))}`, action: null,
+    body: `
+    <div class="att-sum"><span><b>${yes.length}</b> geliyor</span><span><b>${no.length}</b> gelemiyor</span><span><b>${none.length}</b> no answer</span></div>
+    <div class="section-lbl">Geliyor · ${yes.length}</div>
+    <ul class="list">${yes.map((m) => row(m)).join("") || `<li class="muted small">No one yet.</li>`}</ul>
+    ${no.length ? `<div class="section-lbl">Gelemiyor · ${no.length}</div><ul class="list">${no.map((m) => row(m)).join("")}</ul>` : ""}
+    <hr class="att-hr" />
+    <div class="section-lbl">Haven't answered yet · ${none.length}</div>
+    ${none.length ? `<p class="hint" style="margin:-4px 0 8px">Tap ${ic("chat")} to ask them on WhatsApp with their personal link.</p>` : ""}
+    <ul class="list">${none.map((m) => row(m, true)).join("") || `<li class="muted small">Everyone has answered 🎉</li>`}</ul>`,
+  });
 }
 
 function rotaSheet() {
@@ -1814,6 +1836,7 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "rota": rotaSheet(); break;
+    case "attendance": attendanceSheet(el.dataset.week); break;
     case "toPrivate": {
       const part = el.dataset.part, wk = S.state.weeks[el.dataset.week];
       const pub = part === "sunum" ? wk.konu?.notes : part === "sohbet" ? wk.sohbet?.notes : wk.hadis?.notes;
