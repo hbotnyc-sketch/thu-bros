@@ -1572,6 +1572,8 @@ document.addEventListener("click", async (e) => {
     case "switch":
       if (confirm(`You're ${nameOf(me)}. Switch to a different name?`)) {
         closeSheet(); me = null; store.set("sohbet.me", null);
+        fetch("/api/signout", { method: "POST" }).catch(() => {});
+        try { sessionStorage.removeItem("tb.visit"); } catch {}
         chat.summary = { unread: {}, last: [] }; render(); window.scrollTo(0, 0);
       }
       break;
@@ -1748,6 +1750,10 @@ function showWelcomeHadith() {
 (async () => {
   try {
     await api();
+    // Browser forgot the name (Safari 7-day cleanup, cleared data…)? Restore it from the server cookie.
+    if (!me || !member(me)) {
+      try { const w = await apiX("/api/whoami"); if (w.id && member(w.id)) { me = w.id; store.set("sohbet.me", me); } } catch {}
+    }
     if (!S.state.settings.tz) await api({ type: "init", tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
     render();
     trackVisit();
