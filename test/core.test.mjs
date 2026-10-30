@@ -267,6 +267,16 @@ t("notifications: host confirm, hadis, sohbet, sunum, recap for all; targeted as
   assert.equal(s.members.find((m) => m.name === "Celal").notifSeenAt, FRI + 5);
 });
 
+t("visitor feedback lands for real and notifies the inbox owner", () => {
+  const s = emptyState();
+  applyAction(s, { type: "init", tz: TZ }, FRI);
+  const f = applyAction(s, { type: "addMember", name: "Furkan" }, FRI).id;
+  advance(s, FRI);
+  act(s, FRI, { type: "postGuestFeedback", guest: "Yusuf (Baltimore group)", text: "We'd love this for our sohbet!" });
+  assert.equal(s.feedback[0].guest, "Yusuf (Baltimore group)"); assert.equal(s.feedback[0].by, null);
+  assert.equal(s.events[0].to, f); assert.equal(s.events[0].guest, "Yusuf (Baltimore group)");
+});
+
 t("geliyorum / gelemiyorum", () => {
   const { s, ids } = group(2, FRI);
   act(s, FRI, { type: "rsvp", weekId: WEEK, actor: ids[0], answer: "yes" });
@@ -276,3 +286,6 @@ t("geliyorum / gelemiyorum", () => {
 });
 
 console.log(`\n${pass} tests passed`);
+import fs from "node:fs";
+assert.equal(fs.readFileSync(new URL("../public/core.mjs", import.meta.url), "utf8"), fs.readFileSync(new URL("../lib/core.mjs", import.meta.url), "utf8"), "run: cp lib/core.mjs public/core.mjs");
+console.log("✓ public/core.mjs in sync");

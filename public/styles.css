@@ -601,3 +601,10 @@ button.avatar { position: relative; }
   .topbar .icon-btn:not(.refresh) { width: 36px; height: 36px; }
   .topbar .avatar { width: 34px; height: 34px; }
 }
+
+/* visitor preview */
+.demo-bar { display: flex; align-items: center; gap: 8px; padding: 10px 8px 10px 14px; margin: 4px 0 14px; border-radius: 18px; background: var(--tertiary-container); color: var(--on-tertiary-container); }
+.demo-bar .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; line-height: 1.3; }
+.demo-bar .btn.filled { background: var(--on-tertiary-container); color: var(--tertiary-container); }
+.demo-bar .btn.text { color: inherit; }
+.avatar.guest { background: var(--tertiary-container); color: var(--on-tertiary-container); }

@@ -1,12 +1,24 @@
 // Thursday Bros — single-page client. No framework: state → render() → event delegation.
 import { HADITHS } from "./hadiths.js";
+import { applyAction as demoApply, advance as demoAdvance, view as demoView } from "./core.mjs";
+
+/* ---------- visitor preview mode (/?demo): live data, every action stays in this browser ---------- */
+const DEMO = (() => {
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.has("demo")) { sessionStorage.setItem("tb.demo", "1"); history.replaceState(null, "", location.pathname); }
+    if (q.has("exitdemo")) { sessionStorage.removeItem("tb.demo"); history.replaceState(null, "", location.pathname); }
+    return sessionStorage.getItem("tb.demo") === "1";
+  } catch { return false; }
+})();
 
 /* ---------- tiny helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
+  // Visitor preview keeps its own sign-in separate from the real one
+  get(k) { try { return DEMO ? sessionStorage.getItem("demo." + k) : localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { const st = DEMO ? sessionStorage : localStorage, key = DEMO ? "demo." + k : k; v == null ? st.removeItem(key) : st.setItem(key, v); } catch {} },
 };
 const HOUR = 3600000, DAY = 24 * HOUR;
 
@@ -67,6 +79,7 @@ const now = () => Date.now() + skew;
 const members = () => S.state.members;
 const member = (id) => members().find((m) => m.id === id);
 const nameOf = (id) => member(id)?.name || "Someone";
+const fbName = (f) => (f.guest ? `${f.guest} (visitor)` : nameOf(f.by));
 const initials = (id) => (nameOf(id).trim()[0] || "?").toUpperCase();
 const hue = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
 const avatar = (id, cls = "") =>
@@ -87,7 +100,33 @@ function left(ms) {
 }
 
 /* ---------- api ---------- */
+let demoState = null, demoDirty = false;
+const cityOnly = (a) => { const p = String(a || "").split(",").map((x) => x.trim()).filter(Boolean); return p.length > 1 ? p.slice(1).join(", ") : p.length ? "(address hidden)" : ""; };
+function demoMask(st) {
+  st.members.forEach((m) => { m.phone = ""; if (m.address) m.address = cityOnly(m.address); });
+  Object.values(st.weeks).forEach((w) => { if (w.place) w.place = cityOnly(w.place); if (w.hostNotes) w.hostNotes = "(host notes are hidden in the visitor preview)"; });
+  return st;
+}
+async function demoApi(body) {
+  if (!demoState || (!body && !demoDirty)) {
+    const r = await fetch("/api"); const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Can't reach the server");
+    skew = j.now - Date.now();
+    demoState = demoMask(j.state);
+  }
+  const t = Date.now() + skew;
+  let result = null;
+  if (body) {
+    const snapshot = structuredClone(demoState);
+    try { demoAdvance(demoState, t); result = demoApply(demoState, body, t); demoAdvance(demoState, t); demoDirty = true; }
+    catch (e) { demoState = snapshot; throw new Error(e.message); }
+  } else demoAdvance(demoState, t);
+  S = demoView(demoState, t);
+  if (!sel || !S.state.weeks[sel] || sel < S.currentWeekId) sel = S.currentWeekId;
+  return result;
+}
 async function api(body) {
+  if (DEMO) return demoApi(body);
   const r = await fetch("/api", {
     method: body ? "POST" : "GET",
     headers: body ? { "content-type": "application/json" } : {},
@@ -251,7 +290,7 @@ function waLink(phone, text) {
 /* ---------- render ---------- */
 function render() {
   if (!S) return;
-  if (!me || !member(me)) { me = null; store.set("sohbet.me", null); return renderWho(); }
+  if (!me || !member(me)) { me = null; store.set("sohbet.me", null); return DEMO ? renderDemoWho() : renderWho(); }
   const w = W();
   $("#app").innerHTML = `
     <header class="topbar"><div class="topbar-in">
@@ -262,7 +301,7 @@ function render() {
       <button class="avatar" data-a="profile" title="${esc(nameOf(me))} — profile & my notes" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
     </div></header>
     <main class="wrap">
-      ${installBar()}
+      ${DEMO ? demoBar() : installBar()}
       ${renderHostPrompt()}
       ${renderPrompt()}
       ${renderWeekTabs()}
@@ -770,7 +809,8 @@ async function profileSheet(focusWeek) {
     <div class="prof">${avatar(me, "lg")}<div><div class="who" style="font-size:18px;font-weight:500">${esc(m.name)}</div>
       <div class="small muted">${m.phone ? esc(m.phone) : "No WhatsApp number"}${m.address ? " · " + esc(m.address) : ""}</div></div></div>
 
-    ${roleId("feedback") === me ? `<button type="button" class="btn filled block" data-a="stats" style="margin:6px 0 8px">📊 Site stats · who joined</button>` : ""}
+    ${roleId("feedback") === me && !DEMO ? `<button type="button" class="btn filled block" data-a="stats" style="margin:6px 0 8px">📊 Site stats · who joined</button>
+      <button type="button" class="btn tonal block" data-a="demoLink" style="margin:0 0 8px">👀 Visitor preview link (for other groups)</button>` : ""}
     ${roleId("feedback") === me ? `<button type="button" class="btn ${feedbackUnread() ? "filled" : "tonal"} block" data-a="feedback" style="margin:6px 0 4px">${ic("chat")} Feedback${feedbackUnread() ? ` · ${feedbackUnread()} new` : ""}</button>` : ""}
     <div class="section-lbl">${ic("lock")} My notes <span class="muted" style="font-weight:400">· only you can see these</span></div>
     ${noteBox(wk, true)}
@@ -816,10 +856,12 @@ function feedbackSheet() {
     action: "Post",
     lead: `Ideas to improve the site or the sohbet? Everyone can see posts here${owner ? `; ${esc(nameOf(owner))} gets notified` : ""}.`,
     body: `
-    <label class="field"><span>Your feedback</span><textarea name="text" rows="3" maxlength="2000" placeholder="e.g. Could we add a reminder the night before?"></textarea></label>
+    ${DEMO ? `<p class="hint" style="margin:0 0 10px">Your feedback is sent for real to the Thursday Bros team, even in the preview.</p>
+      <label class="field"><span>Your name</span><input type="text" name="guest" maxlength="40" value="${esc(store.get("guestName") || "")}" placeholder="e.g. Yusuf (Baltimore)" /></label>` : ""}
+    <label class="field"><span>Your feedback</span><textarea name="text" rows="3" maxlength="2000" placeholder="${DEMO ? "What did you like? What would make it useful for your group?" : "e.g. Could we add a reminder the night before?"}"></textarea></label>
     ${list.length ? `<ul class="fb-list">${list.map((f) => `<li class="${isOwner && f.by !== me && f.at > seen ? "new" : ""}">
-        ${avatar(f.by, "sm")}<div class="grow">
-          <div class="fb-h"><b>${esc(nameOf(f.by))}</b> <span class="muted small">· ${ago(f.at)}</span>${isOwner && f.by !== me && f.at > seen ? ' <span class="chip on fb-new">new</span>' : ""}</div>
+        ${f.guest ? `<span class="avatar sm guest">${esc((f.guest[0] || "V").toUpperCase())}</span>` : avatar(f.by, "sm")}<div class="grow">
+          <div class="fb-h"><b>${esc(fbName(f))}</b> <span class="muted small">· ${ago(f.at)}</span>${isOwner && f.by !== me && f.at > seen ? ' <span class="chip on fb-new">new</span>' : ""}</div>
           <div class="fb-t">${esc(f.text)}</div>
           <div class="fb-a">
             <button type="button" class="fb-like ${f.likes.includes(me) ? "on" : ""}" data-a="fbLike" data-id="${f.id}" aria-pressed="${f.likes.includes(me)}">👍 ${f.likes.length || ""}</button>
@@ -827,6 +869,17 @@ function feedbackSheet() {
           </div></div></li>`).join("")}</ul>` : `<p class="muted">No feedback yet — be the first!</p>`}`,
   }, async (fm) => {
     if (!fm.text?.trim()) { toast("Write something first"); throw 0; }
+    if (DEMO) {
+      const guest = (fm.guest || store.get("guestName") || "").trim() || "Visitor";
+      store.set("guestName", guest);
+      const r = await fetch("/api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "postGuestFeedback", guest, text: fm.text }) });
+      if (!r.ok) { toast("Couldn't send, try again"); throw 0; }
+      demoState.feedback ||= []; demoState.feedback.unshift({ id: "local" + Date.now(), by: null, guest, text: fm.text.trim(), at: Date.now(), likes: [] });
+      S = demoView(demoState, Date.now() + skew); render();
+      toast("Thank you! Your feedback was sent 🙏");
+      setTimeout(feedbackSheet, 0);
+      return;
+    }
     await act("postFeedback", { text: fm.text });
     toast("Thanks — posted!");
     setTimeout(feedbackSheet, 0);
@@ -977,7 +1030,27 @@ function editMemberSheet(id) {
 }
 
 /* ---------- archive: notes, transcripts, recording ---------- */
+const demoLocal = { notes: {}, priv: {}, chat: [] };
+function demoX(path, opts) {
+  const u = new URL(path, location.origin), r = u.pathname.replace("/api/", ""), post = (opts.method || "GET") !== "GET";
+  const ok = (x) => Promise.resolve(x);
+  if (r === "recap" && !post) // archive notes are visible (live); transcripts & recordings stay private
+    return fetch(path).then((x) => x.json()).then((j) => ({ ...j, transcript: "", audio: [], aiEnabled: false }));
+  if (r === "mynotes") { if (post) { demoLocal.notes[u.searchParams.get("week")] = opts.body; return ok({ ok: true }); } return ok({ notes: { ...demoLocal.notes } }); }
+  if (r === "private") { const k = u.searchParams.get("week") + u.searchParams.get("part"); if (post) { demoLocal.priv[k] = opts.body; return ok({ ok: true }); } return ok({ text: demoLocal.priv[k] || "" }); }
+  if (r === "chat/summary") return ok({ unread: {}, last: [] });
+  if (r === "chat") {
+    if (post) { const m = { id: demoLocal.chat.length + 1, sender: me, body: opts.body, at: Date.now() }; demoLocal.chat.push(m); return ok({ message: m }); }
+    const after = +u.searchParams.get("after") || 0; return ok({ messages: demoLocal.chat.filter((m) => m.id > after) });
+  }
+  if (r === "transcript" || r === "audio") return ok({ ok: true, stored: false });
+  if (r === "recap" && post) return Promise.reject(new Error("Visitor preview: notes aren't saved"));
+  if (r === "transcribe" || r === "summarize") return Promise.reject(new Error("Visitor preview: AI is turned off here"));
+  if (r === "stats") return Promise.reject(new Error("Stats are only for the admin"));
+  return ok({});
+}
 async function apiX(path, opts = {}) {
+  if (DEMO) { const d = demoX(path, opts); if (d) return d; }
   const r = await fetch(path, opts);
   let j; try { j = await r.json(); } catch { throw new Error("Can't reach the server"); }
   if (!r.ok) throw new Error(j.error || "Something went wrong");
@@ -1284,7 +1357,7 @@ function visitorId() {
 }
 function trackVisit() {
   try { if (sessionStorage.getItem("tb.visit") === (me || "-")) return; sessionStorage.setItem("tb.visit", me || "-"); } catch {}
-  fetch(`/api/visit?vid=${visitorId()}&actor=${me || ""}`, { method: "POST" }).catch(() => {});
+  fetch(`/api/visit?vid=${visitorId()}&actor=${DEMO ? "" : me || ""}${DEMO ? "&demo=1" : ""}`, { method: "POST" }).catch(() => {});
 }
 
 /* ---------- personal links ---------- */
@@ -1402,6 +1475,7 @@ async function statsSheet() {
       <div><b>${joined.length}<small>/${d.members.length}</small></b><span>members joined</span></div>
       <div><b>${d.totals.visitors}</b><span>devices total</span></div>
     </div>
+    ${d.demoTotal ? `<p class="small muted" style="margin:-4px 0 6px">👀 Visitor preview: ${d.demoToday} today · ${d.demoTotal} total</p>` : ""}
     ${d.anonToday ? `<p class="small muted" style="margin:-4px 0 12px">${d.anonToday} visitor${d.anonToday > 1 ? "s" : ""} today opened the site but haven't picked a name yet.</p>` : ""}
     <div class="section-lbl">People per day · last 14 days</div>
     <div class="bars">${days.map((id) => { const x = byDay[id]; const n = x?.people || 0;
@@ -1470,11 +1544,30 @@ function installSheet(tab) {
   });
 }
 
+/* ---------- visitor preview UI ---------- */
+function demoBar() {
+  return `<div class="demo-bar"><span class="grow"><b>👀 Visitor preview</b><span class="small">Live data · try anything, nothing is saved to the real site</span></span>
+    <button class="btn filled small" data-a="feedback">Feedback</button><button class="btn text small" data-a="demoExit">Exit</button></div>`;
+}
+function renderDemoWho() {
+  const list = [...members()].sort((a, b) => a.name.localeCompare(b.name));
+  $("#app").innerHTML = `<main class="who-page">
+    <div class="logo">${logo()}</div>
+    <h1>Visitor preview</h1>
+    <div class="who-brand">Thursday Bros · weekly sohbet</div>
+    <p>You're seeing our real, live page. Tap and try anything: Geliyorum, hosting, sunum… it only changes on your screen, never on the real site. We'd love your feedback!</p>
+    <label class="field"><span>Your name <i>so we know who left feedback</i></span><input type="text" id="demo-name" maxlength="40" placeholder="e.g. Yusuf (Baltimore)" /></label>
+    <button class="btn filled lg block" data-a="demoGuest">Look around as a guest</button>
+    <div class="divider" style="margin-top:22px">or see it through a member's eyes</div>
+    <div class="name-grid">${list.map((m) => `<button data-a="demoAs" data-id="${m.id}">${avatar(m.id, "sm")}${esc(m.name)}</button>`).join("")}</div>
+    <p class="small muted">Chat, private notes, phone numbers and full addresses are hidden in the preview.</p></main>`;
+}
+
 /* ---------- notifications ---------- */
-const myEvents = () => (S.state.events || []).filter((e) => (!e.to || e.to === me) && e.by !== me && (!e.by || member(e.by) || e.type === "sunumAsk"));
+const myEvents = () => (S.state.events || []).filter((e) => (!e.to || e.to === me) && (e.guest || e.by !== me) && (e.guest || !e.by || member(e.by) || e.type === "sunumAsk"));
 const notifUnread = () => { const seen = member(me)?.notifSeenAt || 0; return myEvents().filter((e) => e.at > seen).length; };
 function notifLine(e) {
-  const who = `<b>${esc(nameOf(e.by))}</b>`, day = e.weekId ? esc(shortDate(e.weekId)) : "", t = e.text ? esc(e.text) : "";
+  const who = `<b>${esc(e.guest ? `${e.guest} (visitor)` : nameOf(e.by))}</b>`, day = e.weekId ? esc(shortDate(e.weekId)) : "", t = e.text ? esc(e.text) : "";
   switch (e.type) {
     case "host": return [ic("home"), `${who} confirmed hosting on ${day} — time & address are up`];
     case "hostAsk": return [ic("home"), `${who} can't host on ${day}. <b>Can you host?</b>`];
@@ -1616,7 +1709,7 @@ async function pollChat(first) {
   try {
     const { messages } = await apiX(`/api/chat?conv=${conv}&actor=${me}&after=${chat.lastId}`);
     if (conv !== chat.conv) return;
-    if (first && !messages.length) $("#chat-msgs").innerHTML = `<p class="small muted chat-empty">${conv === "general" ? "Group chat for everyone in Thursday Bros." : `Private chat with ${esc(convName(conv))}. Only you two can see this.`}<br>Say selam 👋</p>`;
+    if (first && !messages.length) $("#chat-msgs").innerHTML = DEMO ? `<p class="small muted chat-empty">Chat is private to the group, so it's hidden in the visitor preview.<br>You can still try sending: messages stay on your screen.</p>` : `<p class="small muted chat-empty">${conv === "general" ? "Group chat for everyone in Thursday Bros." : `Private chat with ${esc(convName(conv))}. Only you two can see this.`}<br>Say selam 👋</p>`;
     appendMsgs(messages);
   } catch {}
 }
@@ -1647,7 +1740,28 @@ document.addEventListener("click", async (e) => {
       break;
     case "profile": profileSheet(el.dataset.week); break;
     case "notifs": notifsSheet(); break;
+    case "demoGuest": {
+      const nm = ($("#demo-name")?.value || "").trim();
+      try { store.set("guestName", nm); } catch {}
+      const r = await api({ type: "addMember", name: "Guest" + (nm ? ` · ${nm}` : "") }).catch((e) => toast(e.message));
+      if (r?.id) { me = r.id; store.set("sohbet.me", me); render(); showWelcomeHadith(); }
+      break;
+    }
+    case "demoAs": me = el.dataset.id; store.set("sohbet.me", me); try { store.set("guestName", ($("#demo-name")?.value || "").trim()); } catch {} render(); toast(`Viewing as ${nameOf(me)}: nothing is saved`); break;
+    case "demoExit": try { sessionStorage.removeItem("tb.demo"); } catch {} location.href = "/"; break;
     case "stats": statsSheet(); break;
+    case "demoLink": {
+      const link = `${location.origin}/?demo`;
+      const text = ascii(`Selam! Persembe sohbetlerimiz icin bir sayfa yaptik: hadis, sohbet, sunum, yemek sirasi, sohbet notlari. Gercek sayfamizi gezebilirsin, ne yaparsan yap bizim sayfayi etkilemiyor. Fikirlerini yazarsan cok seviniriz: ${link}`);
+      openSheet({ title: "Visitor preview link", action: null,
+        lead: "For people outside the group: they see live data, can tap around freely, and nothing they do changes your site. Their feedback reaches you for real.",
+        body: `<textarea id="pt-text" rows="5">${esc(text)}</textarea>
+          <div class="share-btns"><a class="btn filled lg" target="_blank" rel="noopener" href="${waLink("", text)}">${ic("chat")} WhatsApp</a>
+          ${navigator.share ? `<button type="button" class="btn tonal lg" data-a="ptShare">${ic("share")} Share…</button>` : ""}
+          <button type="button" class="btn outlined lg" data-a="ptCopy" data-link="${link}">${ic("link")} Copy</button></div>
+          <p class="hint">Hidden in the preview: chat, private notes, phone numbers, street addresses and host notes.</p>` });
+      break;
+    }
     case "installHow": if (installEvt) { installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; render(); }); } else installSheet(); break;
     case "installNow": closeSheet(); installEvt?.prompt(); installEvt?.userChoice.finally(() => { installEvt = null; render(); }); break;
     case "reload": el.classList.add("spin"); setTimeout(() => location.reload(), 150); break;
@@ -1669,7 +1783,7 @@ document.addEventListener("click", async (e) => {
     case "switch":
       if (confirm(`You're ${nameOf(me)}. Switch to a different name?`)) {
         closeSheet(); me = null; store.set("sohbet.me", null);
-        fetch("/api/signout", { method: "POST" }).catch(() => {});
+        if (!DEMO) fetch("/api/signout", { method: "POST" }).catch(() => {});
         try { sessionStorage.removeItem("tb.visit"); } catch {}
         chat.summary = { unread: {}, last: [] }; render(); window.scrollTo(0, 0);
       }
@@ -1876,12 +1990,12 @@ function showWelcomeHadith() {
   try {
     await api();
     // Browser forgot the name (Safari 7-day cleanup, cleared data…)? Restore it from the server cookie.
-    if (!me || !member(me)) {
+    if (!DEMO && (!me || !member(me))) {
       try { const w = await apiX("/api/whoami"); if (w.id && member(w.id)) { me = w.id; store.set("sohbet.me", me); } } catch {}
     }
     if (!S.state.settings.tz) await api({ type: "init", tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
     render();
-    const hasInvite = new URLSearchParams(location.search).has("i");
+    const hasInvite = !DEMO && new URLSearchParams(location.search).has("i");
     if (hasInvite) await handleInviteLink();
     trackVisit();
     if (me && member(me) && !document.querySelector(".claim")) { showWelcomeHadith(); refreshChatSummary(); } // only once someone has picked their name

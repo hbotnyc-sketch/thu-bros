@@ -1,0 +1,557 @@
+// Sohbet — core state machine (pure, no I/O). Shared by the Netlify functions and the local dev server.
+
+export const HOUR = 3600000;
+export const DAY = 24 * HOUR;
+
+export const DEFAULT_SETTINGS = {
+  tz: null,               // IANA timezone, set from the first visitor's browser
+  sohbetWeekday: 4,       // 0=Sun … 4=Thursday
+  cutoffDaysBefore: 3,    // backup queue starts 3 days before (Monday)
+  cutoffHour: 21,         // …at 9pm local
+  askHours: 24,           // each person in the queue gets 24h to answer
+  cooldown: 5,            // hide the prompt until 5 others have presented
+  defaultTime: "19:00",
+  defaultPlace: "",
+  hostRota: [],           // member ids in hosting order (yemek sırası), repeats after the end
+  rotaStart: null,        // week id of the first host in the list
+  roles: { hadis: null, sohbet: null, feedback: null }, // fixed people (null = anyone); feedback = who gets the badge
+};
+
+export const TOPIC_TYPES = ["esma", "ayet", "siyer", "iman", "other"];
+
+export class HttpError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
+}
+
+export function emptyState() {
+  return { version: 1, members: [], queue: [], weeks: {}, settings: structuredClone(DEFAULT_SETTINGS) };
+}
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+const clean = (v, max = 4000) => String(v ?? "").trim().slice(0, max);
+
+/* ---------- date helpers (week ids are local dates "YYYY-MM-DD") ---------- */
+
+export function addDays(ds, n) {
+  const d = new Date(ds + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+export const weekdayOf = (ds) => new Date(ds + "T00:00:00Z").getUTCDay();
+
+export function localDate(ms, tz) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(new Date(ms));
+}
+function tzOffset(ms, tz) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).formatToParts(new Date(ms)).map((x) => [x.type, x.value])
+  );
+  return Date.UTC(+p.year, p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ms / 1000) * 1000;
+}
+/** UTC ms for a local wall-clock time (date + hour) in tz */
+export function zonedTime(ds, hour, tz) {
+  const guess = Date.parse(ds + "T00:00:00Z") + hour * HOUR;
+  const o1 = tzOffset(guess, tz);
+  let t = guess - o1;
+  const o2 = tzOffset(t, tz);
+  if (o2 !== o1) t = guess - o2;
+  return t;
+}
+
+const tzOf = (s) => s.settings.tz || "UTC";
+export function currentWeekId(s, now) {
+  const today = localDate(now, tzOf(s));
+  return addDays(today, (s.settings.sohbetWeekday - weekdayOf(today) + 7) % 7);
+}
+export const cutoffAt = (s, id) => zonedTime(addDays(id, -s.settings.cutoffDaysBefore), s.settings.cutoffHour, tzOf(s));
+export const weekEndAt = (s, id) => zonedTime(addDays(id, 1), 0, tzOf(s));
+
+function newWeek(s, id) {
+  return {
+    id, customTime: "", place: "", cancelled: false, rsvp: {},
+    hadis: null, sohbet: null, konu: null, ask: null, askLog: [],
+    hostVolunteers: [], host: null, hostNotes: "", bring: [],
+  };
+}
+export function ensureWeeks(s, now) {
+  const cur = currentWeekId(s, now);
+  for (let i = 0; i < 4; i++) {
+    const id = addDays(cur, 7 * i);
+    if (!s.weeks[id]) s.weeks[id] = newWeek(s, id);
+  }
+  return cur;
+}
+
+/* ---------- host order (yemek sırası) ---------- */
+
+const weeksBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / (7 * DAY));
+/** Host from the rotating order, ignoring per-week changes. */
+export function rotaHost(s, weekId) {
+  const r = (s.settings.hostRota || []).filter((id) => s.members.some((m) => m.id === id));
+  if (!r.length || !s.settings.rotaStart) return null;
+  const n = weeksBetween(s.settings.rotaStart, weekId);
+  return r[((n % r.length) + r.length) % r.length];
+}
+/** Rota members in order, starting from this week's rota host. */
+function rotaOrderFrom(s, weekId) {
+  const r = (s.settings.hostRota || []).filter((id) => s.members.some((m) => m.id === id));
+  const first = rotaHost(s, weekId);
+  if (!first) return [];
+  const i = r.indexOf(first);
+  return [...r.slice(i), ...r.slice(0, i)];
+}
+/** Who is (or is being asked to be) the host this week.
+ *  An explicit host wins; otherwise the rota host, or the next person in order if they skipped. */
+export function hostFor(s, weekId) {
+  const w = s.weeks[weekId];
+  const rh = rotaHost(s, weekId);
+  const skips = w?.hostSkips || [];
+  let id = w?.host && s.members.some((m) => m.id === w.host) ? w.host : null;
+  if (!id) id = rotaOrderFrom(s, weekId).find((x) => !skips.includes(x)) || null;
+  if (!id) return null;
+  return { id, changed: id !== rh, confirmed: !!w && w.hostConfirmed === id, skipped: skips };
+}
+
+/* ---------- cooldown ---------- */
+
+function presentations(s) {
+  return Object.values(s.weeks)
+    .filter((w) => w.konu && !w.cancelled)
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map((w) => w.konu.presenterId);
+}
+/** Cooldown can't exceed group size − 1, or small groups would lock everyone out. */
+export const effectiveCooldown = (s) => Math.max(0, Math.min(s.settings.cooldown, s.members.length - 1));
+/** How many more *other* presentations are needed before this member sees the prompt again. */
+export function cooldownLeft(s, memberId) {
+  const p = presentations(s);
+  const i = p.lastIndexOf(memberId);
+  if (i < 0) return 0;
+  return Math.max(0, effectiveCooldown(s) - (p.length - 1 - i));
+}
+
+/* ---------- backup queue ---------- */
+
+const toEnd = (s, id) => { s.queue = s.queue.filter((x) => x !== id); s.queue.push(id); };
+
+function pickNext(s, w) {
+  const asked = new Set(w.askLog.map((l) => l.memberId));
+  const live = new Set(s.members.map((m) => m.id));
+  return s.queue.find((id) => live.has(id) && !asked.has(id) && cooldownLeft(s, id) === 0) || null;
+}
+
+/** One-time setup: the group's yemek sırası (from WhatsApp), starting Thu Nov 5, 2026.
+ *  Runs once; later edits on the site are never overwritten. */
+const INITIAL_ROTA = { start: "2026-11-05", names: ["Berkay", "Harun", "Ahmet", "Mevlut", "Zahit", "Furkan", "Ihsan", "Mustafa", "Enes", "I. Burak", "Celal", "Ebubekir"] };
+const INITIAL_ROLES = { hadis: "Ihsan", sohbet: "Harun", feedback: "Furkan" };
+const LAUNCH_WEEK = "2026-11-05"; // first real Thursday Bros sohbet
+function clearHosting(w) {
+  w.host = null; w.hostConfirmed = null; w.hostSkips = []; w.place = ""; w.hostNotes = ""; w.customTime = "";
+}
+export function seedOnce(s) {
+  seedRota(s);
+  // One-time: undo test hosting done with Berkay's login for Nov 5 (he'll confirm for real later).
+  if (!s.settings.resetTestHosting1) {
+    s.settings.resetTestHosting1 = true;
+    if (s.weeks[LAUNCH_WEEK]) clearHosting(s.weeks[LAUNCH_WEEK]);
+    const berkay = s.members.find((m) => m.name.toLowerCase() === "berkay");
+    if (berkay) delete berkay.address;
+  }
+  // One-time cleanup: anything entered for weeks before launch was a test / wrong week.
+  if (!s.settings.prelaunchCleaned) {
+    s.settings.prelaunchCleaned = true;
+    for (const w of Object.values(s.weeks)) {
+      if (w.id < LAUNCH_WEEK) { w.konu = null; w.ask = null; w.askLog = []; }
+    }
+  }
+  if (!s.settings.rolesSeeded2) {
+    s.settings.rolesSeeded = s.settings.rolesSeeded2 = true;
+    s.settings.roles ||= { hadis: null, sohbet: null };
+    for (const [role, name] of Object.entries(INITIAL_ROLES)) {
+      const m = s.members.find((x) => x.name.toLowerCase() === name.toLowerCase());
+      if (m && !s.settings.roles[role]) s.settings.roles[role] = m.id;
+    }
+  }
+}
+function seedRota(s) {
+  if (s.settings.rotaSeeded) return;
+  s.settings.rotaSeeded = true;
+  if ((s.settings.hostRota || []).length) return;
+  s.settings.hostRota = INITIAL_ROTA.names.map((name) => {
+    let m = s.members.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    if (!m) { m = { id: uid(), name, phone: "" }; s.members.push(m); s.queue.push(m.id); }
+    return m.id;
+  });
+  s.settings.rotaStart = INITIAL_ROTA.start;
+}
+
+/** Advance time-based state: create weeks, start the backup queue at cutoff, hand off after 24h. */
+export function advance(s, now) {
+  seedOnce(s);
+  const cur = ensureWeeks(s, now);
+  for (const w of Object.values(s.weeks)) if (w.id < cur && w.ask) w.ask = null;
+
+  const w = s.weeks[cur];
+  if (w.cancelled || w.konu || now < cutoffAt(s, cur) || now >= weekEndAt(s, cur)) {
+    if (w.ask && (w.cancelled || w.konu)) w.ask = null;
+    return cur;
+  }
+  if (w.ask && now - w.ask.askedAt >= s.settings.askHours * HOUR) {
+    w.askLog.push({ memberId: w.ask.memberId, askedAt: w.ask.askedAt, result: "timeout", at: now });
+    toEnd(s, w.ask.memberId);
+    w.ask = null;
+  }
+  if (!w.ask) {
+    const next = pickNext(s, w);
+    if (next) { w.ask = { memberId: next, askedAt: now }; notify(s, { type: "sunumAsk", to: next, weekId: w.id }, now); }
+  }
+  return cur;
+}
+
+/* ---------- actions ---------- */
+
+function topicFields(a) {
+  return {
+    title: clean(a.title, 140),
+    topicType: TOPIC_TYPES.includes(a.topicType) ? a.topicType : "other",
+    summary: clean(a.summary, 600),
+    notes: clean(a.notes, 8000),
+    link: /^https?:\/\//i.test(clean(a.link)) ? clean(a.link, 500) : "",
+  };
+}
+
+/** Activity feed for the 🔔 bell. `to` = only that member sees it. */
+function notify(s, ev, now) {
+  s.events ||= [];
+  s.events.unshift({ id: uid(), at: now, ...ev });
+  if (s.events.length > 200) s.events.length = 200;
+}
+
+const roleOf = (s, role) => {
+  const id = s.settings.roles?.[role];
+  return id && s.members.some((m) => m.id === id) ? id : null;
+};
+
+export function applyAction(s, a, now) {
+  const cur = ensureWeeks(s, now);
+  const need = (c, msg, code = 400) => { if (!c) throw new HttpError(code, msg); };
+  const member = (id) => s.members.find((m) => m.id === id);
+  const week = () => { const w = s.weeks[a.weekId]; need(w, "Unknown week", 404); return w; };
+  const actor = () => { const m = member(a.actor); need(m, "Pick your name first", 401); return m; };
+
+  switch (a.type) {
+    case "init":
+      if (!s.settings.tz && a.tz) { try { localDate(now, a.tz); s.settings.tz = a.tz; } catch {} }
+      return null;
+
+    /* members & queue */
+    case "addMember": {
+      const name = clean(a.name, 40);
+      need(name, "Name is required");
+      need(!s.members.some((m) => m.name.toLowerCase() === name.toLowerCase()), "That name is already in the list");
+      const m = { id: uid(), name, phone: clean(a.phone, 24) };
+      s.members.push(m);
+      s.queue.push(m.id);
+      return { id: m.id };
+    }
+    case "updateMember": {
+      const m = member(a.id); need(m, "Unknown member", 404);
+      if (a.name != null) {
+        const name = clean(a.name, 40); need(name, "Name is required");
+        need(!s.members.some((x) => x.id !== m.id && x.name.toLowerCase() === name.toLowerCase()), "That name is already in the list");
+        m.name = name;
+      }
+      if (a.phone != null) m.phone = clean(a.phone, 24);
+      if (a.address != null) m.address = clean(a.address, 200);
+      return null;
+    }
+    case "removeMember": {
+      need(member(a.id), "Unknown member", 404);
+      s.members = s.members.filter((m) => m.id !== a.id);
+      s.queue = s.queue.filter((id) => id !== a.id);
+      s.settings.hostRota = (s.settings.hostRota || []).filter((id) => id !== a.id);
+      for (const w of Object.values(s.weeks)) {
+        if (w.ask?.memberId === a.id) w.ask = null;
+        w.hostVolunteers = w.hostVolunteers.filter((id) => id !== a.id);
+        if (w.host === a.id) w.host = null;
+      }
+      return null;
+    }
+    case "moveQueue": {
+      const i = s.queue.indexOf(a.id), j = i + (a.dir > 0 ? 1 : -1);
+      if (i >= 0 && j >= 0 && j < s.queue.length) [s.queue[i], s.queue[j]] = [s.queue[j], s.queue[i]];
+      return null;
+    }
+    case "setRota": {
+      // names in order (new names become members); start = first host's week (a Thursday)
+      const names = (Array.isArray(a.names) ? a.names : []).map((n) => clean(n, 40)).filter(Boolean);
+      need(names.length, "Add at least one name");
+      need(/^\d{4}-\d{2}-\d{2}$/.test(a.start || ""), "Pick the first date");
+      const start = addDays(a.start, (s.settings.sohbetWeekday - weekdayOf(a.start) + 7) % 7);
+      let created = 0;
+      const ids = names.map((name) => {
+        let m = s.members.find((x) => x.name.toLowerCase() === name.toLowerCase());
+        if (!m) { m = { id: uid(), name, phone: "" }; s.members.push(m); s.queue.push(m.id); created++; }
+        return m.id;
+      });
+      s.settings.hostRota = ids;
+      s.settings.rotaStart = start;
+      return { created };
+    }
+    case "rsvp": {
+      const w = week(), me = actor();
+      w.rsvp ||= {};
+      if (a.answer === "yes" || a.answer === "no") w.rsvp[me.id] = a.answer;
+      else delete w.rsvp[me.id];
+      return null;
+    }
+    case "setSettings": {
+      if (a.cooldown != null) s.settings.cooldown = Math.max(0, Math.min(20, parseInt(a.cooldown, 10) || 0));
+      if (a.tz) { try { localDate(now, a.tz); s.settings.tz = a.tz; } catch { throw new HttpError(400, "Unknown timezone"); } }
+      if (a.defaultTime != null) s.settings.defaultTime = clean(a.defaultTime, 10);
+      if (a.defaultPlace != null) s.settings.defaultPlace = clean(a.defaultPlace, 200);
+      return null;
+    }
+
+    /* konu */
+    case "claimKonu": {
+      const w = week(), me = actor();
+      need(!w.cancelled, "This week is cancelled");
+      need(!w.konu, "Someone already took this week");
+      need(w.id >= cur, "That week has passed");
+      const asked = w.ask?.memberId === me.id;
+      // After cutoff with nobody left in the queue, anyone may step in.
+      const openToAll = w.id === cur && !w.ask && now >= cutoffAt(s, cur);
+      need(asked || openToAll || cooldownLeft(s, me.id) === 0, "You presented recently — let a few others go first 🙂", 409);
+      const f = topicFields(a);
+      need(f.title, "Give your topic a title");
+      w.konu = { presenterId: me.id, ...f, via: asked ? "queue" : "volunteer", at: now };
+      notify(s, { type: "sunum", by: me.id, weekId: w.id, text: f.title }, now);
+      if (w.ask) {
+        if (asked) w.askLog.push({ memberId: me.id, askedAt: w.ask.askedAt, result: "yes", at: now });
+        w.ask = null;
+      }
+      toEnd(s, me.id);
+      return null;
+    }
+    case "editKonu": {
+      const w = week(), me = actor();
+      need(w.konu, "No topic to edit");
+      need(w.konu.presenterId === me.id, "Only the presenter can edit this", 403);
+      const f = topicFields(a); need(f.title, "Give your topic a title");
+      const notesChanged = f.notes && f.notes !== w.konu.notes;
+      Object.assign(w.konu, f);
+      if (notesChanged) notify(s, { type: "sunumNotes", by: me.id, weekId: w.id, text: f.title }, now);
+      return null;
+    }
+    case "releaseKonu": {
+      const w = week(), me = actor();
+      need(w.konu, "No topic to release");
+      need(w.konu.presenterId === me.id, "Only the presenter can give up this slot", 403);
+      w.konu = null;
+      return null;
+    }
+    case "answerAsk": {
+      const w = week(), me = actor();
+      need(w.ask?.memberId === me.id, "You're not the one being asked right now");
+      // "yes" is completed via claimKonu (with the topic form); here we only handle "no".
+      w.askLog.push({ memberId: me.id, askedAt: w.ask.askedAt, result: "no", at: now });
+      toEnd(s, me.id);
+      w.ask = null;
+      return null;
+    }
+
+    /* hadis */
+    case "setHadis": {
+      const w = week(), me = actor();
+      const owner = roleOf(s, "hadis");
+      need(!owner || owner === me.id, `Only ${member(owner)?.name} can edit the hadis`, 403);
+      const text = clean(a.text, 6000);
+      const hadNone = !w.hadis;
+      w.hadis = text ? { text, source: clean(a.source, 300), notes: clean(a.notes, 6000), by: me.id, at: now } : null;
+      if (w.hadis) notify(s, { type: hadNone ? "hadis" : "hadisEdit", by: me.id, weekId: w.id, text: w.hadis.source }, now);
+      return null;
+    }
+
+    /* weekly sohbet (fixed person) */
+    case "setSohbet": {
+      const w = week(), me = actor();
+      const owner = roleOf(s, "sohbet");
+      need(!owner || owner === me.id, `Only ${member(owner)?.name} can edit the sohbet`, 403);
+      const title = clean(a.title, 140), notes = clean(a.notes, 8000);
+      const link = /^https?:\/\//i.test(clean(a.link)) ? clean(a.link, 500) : "";
+      const hadNoSohbet = !w.sohbet;
+      w.sohbet = title || notes ? { title, notes, link, by: me.id, at: now } : null;
+      if (w.sohbet) notify(s, { type: hadNoSohbet ? "sohbet" : "sohbetEdit", by: me.id, weekId: w.id, text: title }, now);
+      return null;
+    }
+    case "setRoles": {
+      actor();
+      s.settings.roles ||= { hadis: null, sohbet: null };
+      for (const r of ["hadis", "sohbet", "feedback"]) {
+        if (a[r] === undefined) continue;
+        need(!a[r] || member(a[r]), "Unknown member");
+        s.settings.roles[r] = a[r] || null;
+      }
+      return null;
+    }
+
+    /* archive: lightweight recap info kept in state for lists & search (full notes live in their own key) */
+    case "setRecapMeta": {
+      const w = week(), me = actor();
+      w.recap = {
+        title: clean(a.title, 140),
+        tags: (Array.isArray(a.tags) ? a.tags : []).map((t) => clean(t, 40)).filter(Boolean).slice(0, 20),
+        snippet: clean(a.snippet, 300),
+        hasTranscript: !!a.hasTranscript,
+        audioParts: Math.max(0, Math.min(999, parseInt(a.audioParts, 10) || 0)),
+        attendees: (Array.isArray(a.attendees) ? a.attendees : []).filter((id) => member(id)),
+        by: me.id, at: now,
+      };
+      notify(s, { type: "recap", by: me.id, weekId: w.id, text: w.recap.title }, now);
+      return null;
+    }
+
+    /* host & food */
+    case "toggleHostVolunteer": {
+      const w = week(), me = actor();
+      w.hostVolunteers = w.hostVolunteers.includes(me.id)
+        ? w.hostVolunteers.filter((x) => x !== me.id)
+        : [...w.hostVolunteers, me.id];
+      return null;
+    }
+    case "setHost": {
+      const w = week(); actor();
+      need(!a.hostId || member(a.hostId), "Unknown member");
+      w.host = a.hostId || null; // empty = follow the order
+      // picking yourself counts as confirming; picking someone else leaves them to confirm
+      w.hostConfirmed = w.host && (w.host === a.actor || w.hostConfirmed === w.host) ? w.host : null;
+      if (a.place != null) w.place = clean(a.place, 200);
+      if (a.time != null) { const t = clean(a.time, 10); w.customTime = t === s.settings.defaultTime ? "" : t; }
+      if (a.hostNotes != null) w.hostNotes = clean(a.hostNotes, 1000);
+      return null;
+    }
+    case "confirmHost": {
+      // The person being asked confirms (or anyone, once everyone in the order has skipped).
+      const w = week(), me = actor();
+      const h = hostFor(s, w.id);
+      need(!h || h.id === me.id, `${member(h?.id)?.name} is the host this week`, 409);
+      w.host = me.id;
+      w.hostConfirmed = me.id;
+      w.hostSkips = (w.hostSkips || []).filter((x) => x !== me.id);
+      if (a.place != null) w.place = clean(a.place, 200);
+      if (a.hostNotes != null) w.hostNotes = clean(a.hostNotes, 1000);
+      if (a.time) { const t = clean(a.time, 10); w.customTime = t === s.settings.defaultTime ? "" : t; }
+      if (a.saveAddress && w.place) me.address = w.place;
+      notify(s, { type: "host", by: me.id, weekId: w.id }, now);
+      return null;
+    }
+    case "resetHost": {
+      const w = week(); actor();
+      clearHosting(w);
+      return null;
+    }
+    /* feedback board */
+    case "postFeedback": {
+      const me = actor();
+      const text = clean(a.text, 2000); need(text, "Write something first");
+      s.feedback ||= [];
+      s.feedback.unshift({ id: uid(), by: me.id, text, at: now, likes: [] });
+      s.feedback = s.feedback.slice(0, 300);
+      const owner = roleOf(s, "feedback");
+      if (owner && owner !== me.id) notify(s, { type: "feedback", to: owner, by: me.id, text: text.slice(0, 80) }, now);
+      return null;
+    }
+    case "postGuestFeedback": {
+      // From the visitor preview link: no member account, just a name.
+      const text = clean(a.text, 2000); need(text, "Write something first");
+      const guest = clean(a.guest, 40) || "Visitor";
+      s.feedback ||= [];
+      s.feedback.unshift({ id: uid(), by: null, guest, text, at: now, likes: [] });
+      s.feedback = s.feedback.slice(0, 300);
+      const owner = roleOf(s, "feedback");
+      if (owner) notify(s, { type: "feedback", to: owner, guest, text: text.slice(0, 80) }, now);
+      return null;
+    }
+    case "likeFeedback": {
+      const me = actor();
+      const f = (s.feedback || []).find((x) => x.id === a.id); need(f, "Not found", 404);
+      f.likes = f.likes.includes(me.id) ? f.likes.filter((x) => x !== me.id) : [...f.likes, me.id];
+      return null;
+    }
+    case "deleteFeedback": {
+      const me = actor();
+      const f = (s.feedback || []).find((x) => x.id === a.id); need(f, "Not found", 404);
+      need(f.by === me.id || roleOf(s, "feedback") === me.id, "You can only delete your own posts", 403);
+      s.feedback = s.feedback.filter((x) => x.id !== a.id);
+      return null;
+    }
+    case "inviteToken": {
+      // Personal link for one member: opening it signs that person in (after a quick confirm).
+      actor();
+      const m = member(a.id); need(m, "Unknown member", 404);
+      if (!m.invite) m.invite = uid() + uid();
+      return { token: m.invite };
+    }
+    case "seenNotifs": {
+      const me = actor();
+      me.notifSeenAt = now;
+      return null;
+    }
+    case "seenFeedback": {
+      const me = actor();
+      if (roleOf(s, "feedback") === me.id) s.settings.feedbackSeenAt = now;
+      return null;
+    }
+    case "skipHost": {
+      const w = week(), me = actor();
+      const h = hostFor(s, w.id);
+      need(h?.id === me.id, "You're not the host being asked this week");
+      w.hostSkips = [...new Set([...(w.hostSkips || []), me.id])];
+      if (w.host === me.id) w.host = null;
+      w.hostConfirmed = null;
+      if (w.place && w.place === me.address) w.place = "";
+      const nextHost = hostFor(s, w.id);
+      if (nextHost) notify(s, { type: "hostAsk", to: nextHost.id, by: me.id, weekId: w.id }, now);
+      return null;
+    }
+    case "addBring": {
+      const w = week(), me = actor();
+      const item = clean(a.item, 80); need(item, "What are you bringing?");
+      w.bring.push({ id: uid(), memberId: me.id, item });
+      return null;
+    }
+    case "removeBring": {
+      const w = week(); actor();
+      w.bring = w.bring.filter((b) => b.id !== a.id);
+      return null;
+    }
+    case "setCancelled": {
+      const w = week(); actor();
+      w.cancelled = !!a.cancelled;
+      if (w.cancelled) w.ask = null;
+      return null;
+    }
+    default:
+      throw new HttpError(400, "Unknown action");
+  }
+}
+
+/** What the client receives: raw state + computed bits. */
+export function view(s, now) {
+  const cur = currentWeekId(s, now);
+  const weeks = {};
+  for (const id of Object.keys(s.weeks)) weeks[id] = { cutoff: cutoffAt(s, id), end: weekEndAt(s, id) };
+  const cooldowns = Object.fromEntries(s.members.map((m) => [m.id, cooldownLeft(s, m.id)]));
+  const hosts = {};
+  for (const id of Object.keys(s.weeks)) hosts[id] = hostFor(s, id);
+  const rotaPreview = [];
+  for (let i = 0; i < 16; i++) { const id = addDays(cur, 7 * i); const h = s.weeks[id] ? hostFor(s, id) : (rotaHost(s, id) ? { id: rotaHost(s, id), changed: false, confirmed: false, skipped: [] } : null); rotaPreview.push({ weekId: id, host: h }); }
+  // Never send personal-link tokens to everyone
+  const pub = { ...s, members: s.members.map(({ invite, ...m }) => m) };
+  return { state: pub, now, currentWeekId: cur, weekMeta: weeks, cooldowns, effectiveCooldown: effectiveCooldown(s), hosts, rotaPreview };
+}
