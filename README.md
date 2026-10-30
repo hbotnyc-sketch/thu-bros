@@ -20,7 +20,14 @@ Other features:
 - **Weeks:** you can claim upcoming weeks ahead of time, cancel a week, or share a summary to WhatsApp.
 - **No logins:** you tap your name once and that phone remembers you. Everyone can manage members and the queue order (👥 icon).
 
-## Deploy to Netlify (about 5 minutes)
+## Deploy to Cloudflare Workers (recommended, free, no badge)
+
+1. In Cloudflare: **Workers & Pages → Create → Import a repository → GitHub → thu-bros → Deploy**.
+2. That's it. `wrangler.jsonc` defines the page (`public/`), `/api`, the KV storage and the hourly cron.
+
+The entry point is `cloudflare/worker.mjs`, and the data lives in one Workers KV key.
+
+## Deploy to Netlify (alternative)
 
 1. Push this folder to a GitHub repo.
 2. In Netlify, go to **Add new site → Import an existing project** and pick the repo.

@@ -1,0 +1,9 @@
+{
+  // Cloudflare Workers config (free plan): static page + /api + hourly backup-queue tick
+  "name": "thu-bros",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "kv_namespaces": [{ "binding": "SOHBET", "id": "d4cb6277155b4e62afb8a78f488be349" }],
+  "triggers": { "crons": ["0 * * * *"] }
+}
