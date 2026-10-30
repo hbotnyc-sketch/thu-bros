@@ -257,6 +257,7 @@ function render() {
       <button class="avatar" data-a="profile" title="${esc(nameOf(me))} — profile & my notes" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
     </div></header>
     <main class="wrap">
+      ${installBar()}
       ${renderHostPrompt()}
       ${renderPrompt()}
       ${renderWeekTabs()}
@@ -777,7 +778,8 @@ async function profileSheet(focusWeek) {
       <button type="button" class="btn tonal" data-a="pfSave">Save details</button>
       <button type="button" class="btn text" data-a="switch">Switch user</button>
     </div>
-    <button type="button" class="btn outlined block" data-a="members" style="margin-top:14px">${ic("users")} Members, queue & settings</button>`,
+    <button type="button" class="btn outlined block" data-a="members" style="margin-top:14px">${ic("users")} Members, queue & settings</button>
+    ${isStandalone() ? "" : `<button type="button" class="btn text block" data-a="installSheet" style="margin-top:6px">📲 Add to home screen</button>`}`,
   });
 }
 const nbTimers = {};
@@ -1266,6 +1268,58 @@ async function uploadAudio(id, file) {
   }
 }
 
+/* ---------- add to home screen ---------- */
+let installEvt = null; // Android/desktop Chrome can install directly
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; if (S && me) render(); });
+const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
+const platform = () => {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return /CriOS/.test(ua) ? "ios-chrome" : "ios-safari";
+  if (/Android/.test(ua)) return "android";
+  return "desktop";
+};
+function installBar() {
+  if (isStandalone()) return "";
+  try { if (localStorage.getItem("tb.installDismissed")) return ""; } catch {}
+  return `<div class="install-bar" role="note">
+    <span class="ib-ic">${logo()}</span>
+    <span class="grow"><b>Add Thursday Bros to your home screen</b><span class="small muted">Opens like an app, one tap away</span></span>
+    <button class="btn filled small" data-a="installHow">${installEvt ? "Install" : "How?"}</button>
+    <button class="icon-btn" data-a="installHide" aria-label="Dismiss">${ic("x")}</button></div>`;
+}
+const SHARE_IOS = `<svg class="ic inl" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>`;
+const INSTALL_STEPS = {
+  "ios-safari": { label: "iPhone · Safari", steps: [
+    `Open <b>${location.host}</b> in <b>Safari</b>.`,
+    `Tap the <b>Share</b> button ${SHARE_IOS} at the bottom of the screen (on iPad: top right).`,
+    `Scroll down and tap <b>Add to Home Screen</b>.`,
+    `Keep the name <b>Thursday Bros</b> (or edit it).`,
+    `Tap <b>Add</b> in the top-right corner. The TB icon appears with your apps.`] },
+  "ios-chrome": { label: "iPhone · Chrome", steps: [
+    `Open the <b>Google Chrome</b> app and go to <b>${location.host}</b>.`,
+    `Tap the <b>Share</b> button ${SHARE_IOS} to the right of the address bar.`,
+    `Scroll down and select <b>Add to Home Screen</b>.`,
+    `Edit the name if you like.`,
+    `Tap <b>Add</b> in the top corner to place it on your home screen.`] },
+  "android": { label: "Android · Chrome", steps: [
+    `Open <b>${location.host}</b> in <b>Chrome</b>.`,
+    `Tap the <b>⋮</b> menu at the top right.`,
+    `Tap <b>Add to Home screen</b> (or <b>Install app</b>).`,
+    `Tap <b>Install</b> / <b>Add</b>. The TB icon appears with your apps.`] },
+};
+function installSheet(tab) {
+  const cur = tab || (platform() === "desktop" ? "ios-safari" : platform());
+  openSheet({
+    title: "Add to home screen", action: null,
+    lead: "Save Thursday Bros next to your apps. It opens full-screen, like a real app.",
+    body: `
+    ${installEvt ? `<button type="button" class="btn filled lg block" data-a="installNow" style="margin-bottom:16px">${ic("plus")} Install now</button>` : ""}
+    <div class="seg tabs">${Object.entries(INSTALL_STEPS).map(([k, v]) => `<label><input type="radio" name="it" value="${k}" ${k === cur ? "checked" : ""} data-it /><span>${v.label}</span></label>`).join("")}</div>
+    <ol class="steps">${INSTALL_STEPS[cur].steps.map((x) => `<li>${x}</li>`).join("")}</ol>
+    ${platform() === cur ? `<p class="hint">↑ These are the steps for the browser you're using now.</p>` : ""}`,
+  });
+}
+
 /* ---------- notifications ---------- */
 const myEvents = () => (S.state.events || []).filter((e) => (!e.to || e.to === me) && e.by !== me && (!e.by || member(e.by) || e.type === "sunumAsk"));
 const notifUnread = () => { const seen = member(me)?.notifSeenAt || 0; return myEvents().filter((e) => e.at > seen).length; };
@@ -1443,6 +1497,10 @@ document.addEventListener("click", async (e) => {
       break;
     case "profile": profileSheet(el.dataset.week); break;
     case "notifs": notifsSheet(); break;
+    case "installHow": if (installEvt) { installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; render(); }); } else installSheet(); break;
+    case "installNow": closeSheet(); installEvt?.prompt(); installEvt?.userChoice.finally(() => { installEvt = null; render(); }); break;
+    case "installHide": try { localStorage.setItem("tb.installDismissed", "1"); } catch {} render(); toast("You can find it anytime in your Profile"); break;
+    case "installSheet": installSheet(); break;
     case "notifGo": notifGo(el); break;
     case "chat": chatList(); break;
     case "chatNew": chatNew(); break;
@@ -1546,6 +1604,7 @@ document.addEventListener("click", async (e) => {
 });
 
 document.addEventListener("change", async (e) => {
+  if (e.target.matches?.("[data-it]")) { installSheet(e.target.value); return; }
   if (e.target.matches?.("[data-tq]")) { const t = $("#sheet-root input[name=time]"); if (t) t.value = e.target.value; return; }
   const el = e.target.closest("[data-change]");
   if (!el) return;

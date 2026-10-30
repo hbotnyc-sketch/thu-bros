@@ -542,3 +542,16 @@ button.avatar { position: relative; }
 .chat-compose .send { width: 44px; height: 44px; padding: 0; flex: none; }
 @media (min-width: 700px) { .chat-sheet { height: min(86vh, 820px); } }
 .notif-list li + li { margin-top: 6px; }
+
+/* add-to-home-screen bar + steps */
+.install-bar { display: flex; align-items: center; gap: 10px; padding: 10px 6px 10px 12px; margin: 4px 0 14px; border-radius: 18px; background: var(--surface-1); border: 1px solid var(--outline-var); }
+.install-bar .ib-ic .mark { width: 34px; height: 34px; display: block; }
+.install-bar .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; line-height: 1.3; }
+.install-bar b { font-weight: 600; }
+.install-bar .icon-btn { width: 34px; height: 34px; }
+.seg.tabs { margin-bottom: 14px; }
+.steps { margin: 0; padding-left: 0; list-style: none; counter-reset: st; }
+.steps li { counter-increment: st; position: relative; padding: 10px 0 10px 44px; font-size: 15.5px; line-height: 1.5; border-top: 1px solid var(--outline-var); }
+.steps li:first-child { border-top: 0; }
+.steps li::before { content: counter(st); position: absolute; left: 0; top: 9px; width: 30px; height: 30px; border-radius: 50%; background: var(--primary-container); color: var(--on-primary-container); display: grid; place-items: center; font-weight: 600; font-size: 14px; }
+.ic.inl { width: 18px; height: 18px; vertical-align: -3px; color: var(--primary); }
