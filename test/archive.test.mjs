@@ -67,5 +67,15 @@ await t("works without R2: audio not stored, transcription still fine", async ()
   assert.equal((await call(`/api/recap?week=${wk}`)).body.mediaEnabled, false);
   env.MEDIA = m;
 });
+await t("private notes: only the part's owner can read/write, stored per person", async () => {
+  // make `me` the sunum presenter of wk; add another member
+  state.weeks[wk].konu = { presenterId: me, title: "x" };
+  state.members.push({ id: "other", name: "Other", phone: "" });
+  assert.equal((await call(`/api/private?week=${wk}&part=sunum&actor=${me}`, { method: "POST", body: "gizli not" })).status, 200);
+  assert.equal((await call(`/api/private?week=${wk}&part=sunum&actor=${me}`)).body.text, "gizli not");
+  assert.equal((await call(`/api/private?week=${wk}&part=sunum&actor=other`)).status, 403);
+  assert.equal((await call(`/api/private?week=${wk}&part=sunum&actor=nobody`)).status, 401);
+  assert.ok(!JSON.stringify(state).includes("gizli not"), "never in the shared state");
+});
 assert.throws(() => parseSummary("no json here"));
 console.log(`\n${pass} archive tests passed`);

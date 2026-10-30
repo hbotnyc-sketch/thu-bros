@@ -32,6 +32,7 @@ const ICONS = {
   food: '<path d="M3 11h18a9 9 0 0 1-18 0zM7 7c0-1.5 1-2 1-3.5M12 7c0-1.5 1-2 1-3.5M17 7c0-1.5 1-2 1-3.5"/>',
   trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
   ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   notes: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
   rec: '<circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>',
@@ -108,6 +109,7 @@ async function act(type, data = {}) {
   }
 }
 async function refresh() {
+  if (document.querySelector("details.private[open]")) return; // don't wipe private notes being written
   try { await api(); render(); } catch (e) { if (!S) showError(e.message); }
 }
 
@@ -352,6 +354,7 @@ function renderHadis(w) {
       ${h.notes ? `<div class="notes-box"><div class="lbl">Discussion notes</div>${clampBlock("h" + w.id, h.notes)}</div>` : ""}`
     : edit ? `${sampleHadis()}<button class="btn tonal" data-a="hadis">${ic("plus")} Add hadis</button>`
     : `<p class="empty" style="margin:0">${esc(nameOf(owner))} will post this week's hadis here.</p>`}
+    ${owner === me ? privateBox(w, "hadis") : ""}
   </section>`;
 }
 
@@ -367,8 +370,34 @@ function renderSohbet(w) {
       ${so.link ? `<div class="actions"><a class="btn outlined" href="${esc(so.link)}" target="_blank" rel="noopener">${ic("link")} Open link</a></div>` : ""}`
     : edit ? `${sampleSohbet()}<button class="btn tonal" data-a="sohbet">${ic("plus")} Add sohbet topic</button>`
     : `<p class="empty" style="margin:0">${esc(nameOf(owner))} will share the sohbet topic and notes here before Thursday.</p>`}
+    ${owner === me ? privateBox(w, "sohbet") : ""}
   </section>`;
 }
+
+/** 🔒 Private notes box — only rendered for the person running that part. */
+function privateBox(w, part) {
+  return `<details class="private" data-priv="${part}" data-week="${w.id}">
+    <summary>${ic("lock")} My notes <span class="muted small">· only you can see these</span></summary>
+    <div class="priv-body"><textarea rows="6" maxlength="20000" placeholder="Your own prep: reminders, points you want to make, questions to ask…"></textarea>
+    <div class="row" style="justify-content:space-between;margin-top:8px"><span class="small muted priv-status"></span>
+    <button type="button" class="btn tonal small" data-a="privSave">Save</button></div></div></details>`;
+}
+document.addEventListener("toggle", async (e) => {
+  const d = e.target;
+  if (!d.matches?.("details.private") || !d.open || d.dataset.loaded) return;
+  const ta = d.querySelector("textarea"), st = d.querySelector(".priv-status");
+  st.textContent = "Loading…";
+  try {
+    const j = await apiX(`/api/private?week=${d.dataset.week}&part=${d.dataset.priv}&actor=${me}`);
+    ta.value = j.text; d.dataset.loaded = "1"; st.textContent = j.text ? "" : "Nothing yet";
+  } catch (err) { st.textContent = err.message; }
+}, true);
+
+document.addEventListener("input", (e) => { const d = e.target.closest?.("details.private"); if (d) { d.dataset.dirty = "1"; d.querySelector(".priv-status").textContent = "Not saved yet"; } });
+document.addEventListener("focusout", (e) => {
+  const d = e.target.closest?.("details.private");
+  if (d?.dataset.dirty && e.target.matches("textarea")) { delete d.dataset.dirty; d.querySelector("[data-a=privSave]")?.click(); }
+});
 
 const instr = (t) => `<span class="instr">(${t})</span>`;
 function sampleHadis() {
@@ -436,8 +465,9 @@ function renderKonu(w) {
     ${k.notes ? `<div class="notes-box"><div class="lbl">Prep notes · skim before sohbet</div>${clampBlock("k" + w.id, k.notes)}</div>` : ""}
     ${k.link ? `<div class="actions"><a class="btn outlined" href="${esc(k.link)}" target="_blank" rel="noopener">${ic("link")} Open link</a></div>` : ""}
     ${mine ? `<div class="row actions">
-      ${!k.notes ? `<button class="btn tonal" data-a="editKonu">${ic("plus")} Add prep notes</button>` : ""}
-      <span class="spacer"></span><button class="btn text danger" data-a="release">Give up slot</button></div>` : ""}
+      ${!k.notes ? `<button class="btn tonal" data-a="editKonu">${ic("plus")} Add notes for everyone</button>` : ""}
+      <span class="spacer"></span><button class="btn text danger" data-a="release">Give up slot</button></div>
+      ${privateBox(w, "sunum")}` : ""}
   </section>`;
 }
 
@@ -1132,6 +1162,16 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "rota": rotaSheet(); break;
+    case "privSave": {
+      const d = el.closest("details.private"), st = d.querySelector(".priv-status");
+      el.disabled = true; st.textContent = "Saving…";
+      try {
+        await apiX(`/api/private?week=${d.dataset.week}&part=${d.dataset.priv}&actor=${me}`, { method: "POST", body: d.querySelector("textarea").value });
+        st.textContent = "Saved ✓"; delete d.dataset.dirty;
+      } catch (err) { st.textContent = err.message; }
+      el.disabled = false;
+      break;
+    }
     case "hostYes": {
       const wk = el.closest(".hero") ? curWeek() : w;
       confirmHostSheet(wk);
