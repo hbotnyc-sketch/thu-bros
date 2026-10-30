@@ -1405,10 +1405,10 @@ function personTemplates(id, link) {
   const n = ascii(firstName(member(id)?.name));
   const cw = curWeek(), gun = `bu Persembe (${trDay(cw.id)})`, h = hostOf(cw);
   const t = [
-    { k: "invite", label: "Invite", text: `Selam ${n}, Persembe sohbetleri icin kucuk bir sayfa actik. Hadis, sohbet, sunum ve yemek sirasi hep orada. Link sana ozel, tiklayinca direkt giris yapiyorsun: ${link}` },
-    { k: "host", label: "Hosting", text: `Selam ${n}, ${gun} yemek sirasi sende insallah. Musaitsen buradan onaylayip adresi ve saati yazar misin? ${link}` },
-    { k: "rsvp", label: "Geliyorum", text: `Selam ${n}, ${gun} geliyor musun? Buradan bir tikla isaretlersen sayiyi bilelim: ${link}` },
-    { k: "sunum", label: "Sunum", text: `Selam ${n}, ${gun} 10-15 dakikalik kisa bir sunum yapmak ister misin? Konuyu buradan secebilirsin: ${link}` },
+    { k: "invite", label: "Invite", text: `Selam ${n}! Persembe sohbetlerimiz icin bir sayfa actik, sen de aramizda ol. Link sana ozel, tikla direkt girersin: ${link}` },
+    { k: "host", label: "Hosting", text: `Selam ${n}, ${gun} ev sahibimiz sensin insallah, Allah razi olsun. Buradan onaylayip adresi ve saati yazar misin? ${link}` },
+    { k: "rsvp", label: "Geliyorum", text: `Selam ${n}! ${gun.charAt(0).toUpperCase() + gun.slice(1)} seni de aramizda gormek isteriz insallah. Geliyor musun? Bir tikla isaretle: ${link}` },
+    { k: "sunum", label: "Sunum", text: `Selam ${n}, ${gun} 10-15 dakikalik kisa bir sunum yapar misin? Senden dinlemek cok guzel olur. Konuyu buradan secebilirsin: ${link}` },
   ];
   return t.map((x) => ({ ...x, text: ascii(x.text), suggested: x.k === "host" ? h?.id === id && !h.confirmed : false }));
 }
