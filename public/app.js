@@ -420,8 +420,8 @@ function renderWeekTabs() {
     const label = id === S.currentWeekId ? (id === today ? "Today" : "Next sohbet") : fmtDate(id, { weekday: "short" });
     const h = hostOf(w);
     const sub = w.cancelled ? `<span class="small muted">No sohbet</span>` :
-      `<span class="dot ${w.hadis ? "full" : ""}" title="Hadis"></span><span class="dot ${w.konu ? "full" : ""}" title="Konu"></span>
-       <span class="wk-host">${h ? esc(nameOf(h.id)) + (h.confirmed ? " ✓" : "") : "Host?"}</span>`;
+      `<span class="tick ${h?.confirmed ? "on" : ""}" title="${h?.confirmed ? "Host confirmed" : "Host not confirmed yet"}">${ic("check")}</span><span class="dot ${w.konu ? "full" : ""}" title="${w.konu ? "Sunum taken" : "Sunum still open"}"></span>
+       <span class="wk-host">${h ? esc(nameOf(h.id)) : "Host?"}</span>`;
     return `<button class="wk ${id === sel ? "sel" : ""}" data-a="week" data-id="${id}">
       <small>${label}</small><b>${fmtDate(id, { month: "short", day: "numeric" })}</b><span class="dots">${sub}</span></button>`;
   }).join("")}</nav>`;
