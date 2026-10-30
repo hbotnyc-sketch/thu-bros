@@ -8,6 +8,7 @@ const t = (name, fn) => { fn(); pass++; console.log("✓", name); };
 
 function group(n, now) {
   const s = emptyState();
+  s.settings.rotaSeeded = true; // keep scenario tests independent of the initial yemek sırası
   applyAction(s, { type: "init", tz: TZ }, now);
   const ids = [];
   for (let i = 0; i < n; i++) ids.push(applyAction(s, { type: "addMember", name: "M" + i }, now).id);
@@ -129,6 +130,20 @@ t("yemek sırası: order from start date, repeats, per-week change, new names be
   assert.deepEqual(hostFor(s, "2026-11-05"), { id: harun, changed: true });
   act(s, FRI, { type: "setHost", weekId: "2026-11-05", actor: harun, hostId: "" });
   assert.equal(nm("2026-11-05"), "Berkay", "clearing the change follows the order again");
+});
+
+t("initial yemek sırası seeds once, matches existing names, never overwrites", () => {
+  const s = emptyState();
+  applyAction(s, { type: "init", tz: TZ }, FRI);
+  const f = applyAction(s, { type: "addMember", name: "furkan" }, FRI).id;
+  advance(s, FRI);
+  assert.equal(s.settings.hostRota.length, 12);
+  assert.equal(s.members.length, 12, "existing Furkan reused");
+  assert.equal(hostFor(s, "2026-11-05").id, s.members.find((m) => m.name === "Berkay").id);
+  assert.equal(hostFor(s, "2026-12-10").id, f);
+  s.settings.hostRota = [f];
+  advance(s, FRI);
+  assert.deepEqual(s.settings.hostRota, [f], "not re-seeded");
 });
 
 t("geliyorum / gelemiyorum", () => {
