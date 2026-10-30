@@ -628,3 +628,18 @@ button.avatar { position: relative; }
 .att-hr { border: 0; border-top: 1px solid var(--outline); margin: 18px 0 4px; }
 .nudge { color: var(--primary); }
 .hint .ic { width: 14px; height: 14px; vertical-align: -2px; }
+
+/* quick tour */
+.tour { position: fixed; inset: 0; z-index: 60; }
+.tour-hole { position: fixed; border-radius: 18px; box-shadow: 0 0 0 9999px rgba(10, 14, 12, .62); transition: all .35s cubic-bezier(.2,.8,.2,1); pointer-events: none; outline: 2px solid color-mix(in srgb, var(--primary-container) 80%, transparent); outline-offset: 2px; }
+.tour-tip { position: fixed; left: 12px; right: 12px; max-width: 420px; margin: 0 auto; background: var(--surface); color: var(--on-surface); border-radius: 20px; padding: 16px 16px 12px; box-shadow: 0 16px 40px rgba(0,0,0,.25); transition: top .35s cubic-bezier(.2,.8,.2,1); animation: rise .3s ease-out; }
+.tour-tip h3 { margin: 2px 0 6px; font-size: 18px; font-weight: 600; }
+.tour-tip p { margin: 0 0 12px; font-size: 15px; line-height: 1.5; color: var(--on-surface-var); }
+.tour-step { font-size: 12px; font-weight: 600; color: var(--primary); letter-spacing: .3px; }
+.tour-btns { display: flex; align-items: center; gap: 4px; }
+.tour-btns .btn.text { padding: 0 10px; color: var(--on-surface-var); }
+.tour-btns .btn.filled { margin-left: 4px; }
+.tour-dots { flex: 1; display: flex; justify-content: center; gap: 5px; }
+.tour-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--outline); }
+.tour-dots i.on { background: var(--primary); width: 16px; border-radius: 3px; }
+@media (min-width: 700px) { .tour-tip { left: 50%; right: auto; width: 400px; transform: translateX(-50%); } }

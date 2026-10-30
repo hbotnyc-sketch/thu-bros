@@ -247,7 +247,10 @@ function addressAutocomplete(input) {
 }
 
 function closeSheet() { stopChatPoll(); $("#sheet-root").innerHTML = ""; sheetSubmit = null; document.body.classList.remove("locked"); refreshChatSummary(); }
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !activeRec) closeSheet(); });
+document.addEventListener("keydown", (e) => {
+  if (tourEls) { if (e.key === "Escape") endTour(); else if (e.key === "ArrowRight") tourGo(tourStep + 1); else if (e.key === "ArrowLeft") tourGo(tourStep - 1); return; }
+  if (e.key === "Escape" && !activeRec) closeSheet();
+});
 
 /* ---------- derived ---------- */
 const W = () => S.state.weeks[sel];
@@ -450,7 +453,7 @@ function clampBlock(key, text) {
 
 function renderHadis(w) {
   const h = w.hadis, owner = roleId("hadis"), edit = canEdit("hadis");
-  return `<section class="card">
+  return `<section class="card" data-tour="hadis">
     <div class="card-h"><span class="badge">${ic("book")}</span><h3>Hadis</h3>
       ${owner ? `<span class="owner">${esc(nameOf(owner))}</span>` : ""}
       ${h && edit ? `<button class="icon-btn" data-a="hadis" aria-label="Edit hadis">${ic("edit")}</button>` : ""}</div>
@@ -552,7 +555,7 @@ function renderKonu(w) {
   const k = w.konu;
   if (!k) {
     const asking = w.ask ? (w.ask.memberId === me ? "The backup queue is asking you this week." : `Backup queue is asking ${esc(nameOf(w.ask.memberId))}.`) : "Open — waiting for a volunteer.";
-    return `<section class="card">
+    return `<section class="card" data-tour="sunum">
       <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Sunum</h3><span class="owner">rotating</span></div>
       <p class="empty">${w.cancelled ? "—" : asking}</p>
       ${w.cancelled ? "" : sampleKonu()}
@@ -561,7 +564,7 @@ function renderKonu(w) {
     </section>`;
   }
   const mine = k.presenterId === me;
-  return `<section class="card">
+  return `<section class="card" data-tour="sunum">
     <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Sunum</h3>
       ${mine ? `<button class="icon-btn" data-a="editKonu" aria-label="Edit topic">${ic("edit")}</button>` : ""}</div>
     <div class="person">${avatar(k.presenterId, "lg")}
@@ -607,7 +610,7 @@ function renderHost(w) {
     ${place && h?.confirmed ? `<div class="addr">${ic("pin")}<div style="flex:1;min-width:0"><div class="addr-t">${esc(place)}</div>
         <div class="row" style="margin-top:8px"><a class="btn outlined small" href="${gmaps(place)}" target="_blank" rel="noopener">Google Maps</a><a class="btn outlined small" href="${amaps(place)}" target="_blank" rel="noopener">Apple Maps</a></div></div></div>` : ""}
     ${w.hostNotes && h?.confirmed ? `<div class="notes-box" style="margin-top:0;margin-bottom:12px"><div class="lbl">Notes from host</div><div class="notes">${esc(w.hostNotes)}</div></div>` : ""}
-    ${w.cancelled ? "" : `<div class="rsvp">
+    ${w.cancelled ? "" : `<div class="rsvp" data-tour="rsvp">
       <div class="section-lbl" style="margin-top:4px">Geliyor musun?</div>
       <div class="seg2" role="group" aria-label="Attendance">
         <button class="${mine === "yes" ? "on" : ""}" data-a="rsvp" data-v="yes" aria-pressed="${mine === "yes"}">${mine === "yes" ? ic("check") : ""}Geliyorum <b>${yes.length}</b></button>
@@ -826,7 +829,8 @@ async function profileSheet(focusWeek) {
       <button type="button" class="btn text" data-a="switch">Switch user</button>
     </div>
     <button type="button" class="btn outlined block" data-a="members" style="margin-top:14px">${ic("users")} Members, queue & settings</button>
-    ${isStandalone() ? "" : `<button type="button" class="btn text block" data-a="installSheet" style="margin-top:6px">📲 Add to home screen</button>`}`,
+    <button type="button" class="btn text block" data-a="tour" style="margin-top:6px">👋 Show the quick tour again</button>
+    ${isStandalone() ? "" : `<button type="button" class="btn text block" data-a="installSheet" style="margin-top:0">📲 Add to home screen</button>`}`,
   });
 }
 const nbTimers = {};
@@ -1585,6 +1589,82 @@ function renderDemoWho() {
     <p class="small muted">Chat, private notes, phone numbers and full addresses are hidden in the preview.</p></main>`;
 }
 
+/* ---------- quick tour (first sign-in; 5 short steps) ---------- */
+const TOUR = [
+  { sel: () => [$(".weeks")], title: "Every Thursday", text: "Each tab is a sohbet. 🏠 is the host, ✓ means the host confirmed, and ● means someone is giving the sunum." },
+  { sel: () => [$("[data-tour=rsvp]")], title: "Coming?", text: "Tap Geliyorum or Gelemiyorum so the host knows the count. The address and time show up here once the host confirms." },
+  { sel: () => [$("[data-tour=sunum]")], title: "Sunum", text: "Each week one of us gives a short 10–15 min talk. Tap Take to volunteer and add your topic." },
+  { sel: () => [$("[data-tour=hadis]")], title: "Hadis & Sohbet", text: "İhsan shares the hadis and Harun the sohbet notes before Thursday, so you can skim them ahead." },
+  { sel: () => [$(".topbar [data-a=chat]"), $(".topbar [data-a=notifs]"), $(".topbar [data-a=profile]")], title: "Stay in the loop", text: "💬 group & private chat, 🔔 updates, and your profile with personal notes. That's it, hoş geldin!" },
+];
+let tourStep = -1, tourEls = null;
+const tourDone = () => store.get("tourDone") === "1";
+function startTour(force) {
+  if (!force && tourDone()) return;
+  if ($("#sheet-root").innerHTML || document.querySelector(".welcome")) return;
+  window.scrollTo(0, 0);
+  tourEls = document.createElement("div");
+  tourEls.className = "tour";
+  tourEls.innerHTML = `<div class="tour-hole"></div><div class="tour-tip" role="dialog" aria-live="polite"></div>`;
+  document.body.appendChild(tourEls);
+  tourEls.addEventListener("click", (e) => {
+    const a = e.target.closest("[data-tour-a]")?.dataset.tourA;
+    if (a === "next") tourGo(tourStep + 1);
+    else if (a === "back") tourGo(tourStep - 1);
+    else if (a === "skip") endTour();
+  });
+  window.addEventListener("resize", tourPlace);
+  window.addEventListener("scroll", tourPlace, { passive: true }); // highlight follows the page while it scrolls
+  tourGo(0);
+}
+function endTour() {
+  store.set("tourDone", "1");
+  tourEls?.remove(); tourEls = null; tourStep = -1;
+  window.removeEventListener("resize", tourPlace);
+  window.removeEventListener("scroll", tourPlace);
+}
+function tourTargets(i) { return TOUR[i].sel().filter(Boolean); }
+function tourGo(i) {
+  if (i >= TOUR.length) return endTour();
+  if (i < 0) return;
+  // skip steps whose part isn't on screen (e.g. cancelled week)
+  while (i < TOUR.length && !tourTargets(i).length) i++;
+  if (i >= TOUR.length) return endTour();
+  tourStep = i;
+  const t = TOUR[i], last = i === TOUR.length - 1;
+  tourEls.querySelector(".tour-tip").innerHTML = `
+    <div class="tour-step">${i + 1} / ${TOUR.length}</div>
+    <h3>${t.title}</h3><p>${t.text}</p>
+    <div class="tour-btns">
+      ${last ? "" : `<button type="button" class="btn text" data-tour-a="skip">Skip</button>`}
+      <span class="tour-dots">${TOUR.map((_, k) => `<i class="${k === i ? "on" : ""}"></i>`).join("")}</span>
+      ${i ? `<button type="button" class="btn text" data-tour-a="back" aria-label="Back">${ic("back")}</button>` : ""}
+      <button type="button" class="btn filled" data-tour-a="next">${last ? "Let's go" : "Next"}</button>
+    </div>`;
+  const els = tourTargets(i);
+  const top = Math.min(...els.map((e) => e.getBoundingClientRect().top + window.scrollY));
+  const bottom = Math.max(...els.map((e) => e.getBoundingClientRect().bottom + window.scrollY));
+  const h = Math.min(bottom - top, innerHeight * 0.45);
+  const want = top - Math.max(84, (innerHeight - h) / 2 - 110);
+  window.scrollTo({ top: Math.max(0, i === TOUR.length - 1 ? 0 : want), behavior: "smooth" });
+  tourPlace(); setTimeout(tourPlace, 400); setTimeout(tourPlace, 800);
+  tourEls.querySelector("[data-tour-a=next]").focus({ preventScroll: true });
+}
+function tourPlace() {
+  if (!tourEls || tourStep < 0) return;
+  const rs = tourTargets(tourStep).map((e) => e.getBoundingClientRect());
+  if (!rs.length) return;
+  const pad = 8;
+  const r = { l: Math.min(...rs.map((x) => x.left)) - pad, t: Math.min(...rs.map((x) => x.top)) - pad,
+              r: Math.max(...rs.map((x) => x.right)) + pad, b: Math.max(...rs.map((x) => x.bottom)) + pad };
+  r.b = Math.min(r.b, r.t + innerHeight * 0.45); // tall cards: spotlight the top part, leave room for the message
+  const hole = tourEls.querySelector(".tour-hole");
+  Object.assign(hole.style, { left: `${Math.max(4, r.l)}px`, top: `${r.t}px`, width: `${Math.min(innerWidth - 8, r.r) - Math.max(4, r.l)}px`, height: `${r.b - r.t}px` });
+  const tip = tourEls.querySelector(".tour-tip");
+  const th = tip.offsetHeight, below = innerHeight - r.b, gap = 12;
+  tip.style.top = below > th + gap + 8 ? `${r.b + gap}px` : r.t > th + gap + 8 ? `${r.t - th - gap}px` : `${Math.max(8, innerHeight - th - 16)}px`;
+}
+
 /* ---------- notifications ---------- */
 const myEvents = () => (S.state.events || []).filter((e) => (!e.to || e.to === me) && (e.guest || e.by !== me) && (e.guest || !e.by || member(e.by) || e.type === "sunumAsk"));
 const notifUnread = () => { const seen = member(me)?.notifSeenAt || 0; return myEvents().filter((e) => e.at > seen).length; };
@@ -1772,6 +1852,7 @@ document.addEventListener("click", async (e) => {
     case "demoAs": me = el.dataset.id; store.set("sohbet.me", me); try { store.set("guestName", ($("#demo-name")?.value || "").trim()); } catch {} render(); toast(`Viewing as ${nameOf(me)}: nothing is saved`); break;
     case "demoExit": try { sessionStorage.removeItem("tb.demo"); } catch {} location.href = "/"; break;
     case "stats": statsSheet(); break;
+    case "tour": closeSheet(); setTimeout(() => startTour(true), 250); break;
     case "demoLink": {
       const link = `${location.origin}/?demo`;
       const text = ascii(`Selam! Persembe sohbetlerimiz icin bir sayfa yaptik: hadis, sohbet, sunum, yemek sirasi, sohbet notlari. Gercek sayfamizi gezebilirsin, ne yaparsan yap bizim sayfayi etkilemiyor. Fikirlerini yazarsan cok seviniriz: ${link}`);
@@ -1958,8 +2039,9 @@ function showError(msg) {
 }
 
 /* ---------- welcome hadith (once per visit) ---------- */
+function maybeTour() { if (me && member(me) && !tourDone()) setTimeout(() => startTour(), 350); }
 function showWelcomeHadith() {
-  try { if (sessionStorage.getItem("tb.welcomed")) return; sessionStorage.setItem("tb.welcomed", "1"); } catch {}
+  try { if (sessionStorage.getItem("tb.welcomed")) return maybeTour(); sessionStorage.setItem("tb.welcomed", "1"); } catch {}
   let last = -1; try { last = +(localStorage.getItem("tb.lastHadith") ?? -1); } catch {}
   let i = Math.floor(Math.random() * HADITHS.length);
   if (i === last) i = (i + 1) % HADITHS.length;
@@ -1977,7 +2059,7 @@ function showWelcomeHadith() {
       <div class="welcome-hint">Tap anywhere to continue</div>
     </div>`;
   let done = false;
-  const close = () => { if (done) return; done = true; el.classList.add("out"); setTimeout(() => el.remove(), 300); };
+  const close = () => { if (done) return; done = true; el.classList.add("out"); setTimeout(() => { el.remove(); maybeTour(); }, 300); };
   el.addEventListener("click", close);
   setTimeout(close, 3000);
   document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", k); } });
