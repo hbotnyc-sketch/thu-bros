@@ -705,7 +705,15 @@ function hostSheet(w) {
     <label class="field"><span>Address <i>blank = host's saved address</i></span><input type="text" name="place" maxlength="200" value="${esc(w.place)}" placeholder="${esc(member(hostOf(w)?.id)?.address || "Start typing an address…")}" autocomplete="off" data-addr /></label>
     <label class="field"><span>Time</span><input type="time" name="time" value="${esc(weekTime(w))}" /></label>
     <label class="field"><span>Notes <i>optional</i></span><textarea name="hostNotes" rows="3" maxlength="1000" placeholder="e.g. Parking on the street, dinner after sohbet">${esc(w.hostNotes)}</textarea></label>`,
-  }, async (f) => { await act("setHost", { weekId: w.id, ...f }); toast("Saved"); });
+    danger: `<button type="submit" class="btn text danger" name="_reset" value="1">${ic("trash")} Reset hosting for this week</button>
+      <p class="hint">Clears the confirmation, skips, address, time and notes, so the host from the yemek sırası is asked again.</p>`,
+  }, async (f, submitter) => {
+    if (submitter?.name === "_reset") {
+      if (!confirm("Reset hosting for this week?")) throw 0;
+      await act("resetHost", { weekId: w.id }); toast("Hosting reset"); return;
+    }
+    await act("setHost", { weekId: w.id, ...f }); toast("Saved");
+  });
 }
 
 function confirmHostSheet(w) {

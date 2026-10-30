@@ -8,7 +8,7 @@ const t = (name, fn) => { fn(); pass++; console.log("✓", name); };
 
 function group(n, now) {
   const s = emptyState();
-  s.settings.rotaSeeded = s.settings.rolesSeeded = s.settings.prelaunchCleaned = true; // isolate scenario tests from one-time setup
+  s.settings.rotaSeeded = s.settings.rolesSeeded = s.settings.prelaunchCleaned = s.settings.resetTestHosting1 = true; // isolate scenario tests from one-time setup
   applyAction(s, { type: "init", tz: TZ }, now);
   const ids = [];
   for (let i = 0; i < n; i++) ids.push(applyAction(s, { type: "addMember", name: "M" + i }, now).id);
@@ -211,6 +211,23 @@ t("everyone skips → anyone can offer to host", () => {
   assert.equal(hostFor(s, WEEK), null);
   act(s, FRI, { type: "confirmHost", weekId: WEEK, actor: c, place: "C's" });
   assert.equal(hostFor(s, WEEK).id, c);
+});
+
+t("one-time reset clears Berkay's test hosting for Nov 5; resetHost does it on demand", () => {
+  const s = emptyState();
+  applyAction(s, { type: "init", tz: TZ }, FRI);
+  s.settings.resetTestHosting1 = true; advance(s, FRI);
+  const b = s.members.find((m) => m.name === "Berkay");
+  act(s, FRI, { type: "confirmHost", weekId: WEEK, actor: b.id, place: "44810 Old Ox Rd", hostNotes: "test", time: "20:00", saveAddress: true });
+  assert.ok(hostFor(s, WEEK).confirmed);
+  delete s.settings.resetTestHosting1; // simulate the deploy that adds the reset
+  advance(s, FRI); // runs the one-time reset
+  assert.equal(hostFor(s, WEEK).id, b.id); assert.equal(hostFor(s, WEEK).confirmed, false);
+  assert.equal(s.weeks[WEEK].place, ""); assert.equal(s.weeks[WEEK].hostNotes, ""); assert.equal(b.address, undefined);
+  act(s, FRI, { type: "confirmHost", weekId: WEEK, actor: b.id, place: "x" });
+  advance(s, FRI); assert.ok(hostFor(s, WEEK).confirmed, "reset only runs once");
+  act(s, FRI, { type: "resetHost", weekId: WEEK, actor: b.id });
+  assert.equal(hostFor(s, WEEK).confirmed, false);
 });
 
 t("geliyorum / gelemiyorum", () => {
