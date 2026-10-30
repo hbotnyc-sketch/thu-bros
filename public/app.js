@@ -351,7 +351,8 @@ function renderHadis(w) {
     ${h ? `
       <p class="quote">${esc(h.text)}</p>
       ${h.source ? `<div class="src">— ${esc(h.source)}</div>` : ""}
-      ${h.notes ? `<div class="notes-box"><div class="lbl">Discussion notes</div>${clampBlock("h" + w.id, h.notes)}</div>` : ""}`
+      ${h.notes ? `<div class="notes-box"><div class="lbl">Discussion notes</div>${clampBlock("h" + w.id, h.notes)}
+        ${owner === me ? `<button class="btn text small move-priv" data-a="toPrivate" data-part="hadis" data-week="${w.id}">${ic("lock")} Move to My notes</button>` : ""}</div>` : ""}`
     : edit ? `${sampleHadis()}<button class="btn tonal" data-a="hadis">${ic("plus")} Add hadis</button>`
     : `<p class="empty" style="margin:0">${esc(nameOf(owner))} will post this week's hadis here.</p>`}
     ${owner === me ? privateBox(w, "hadis") : ""}
@@ -366,7 +367,8 @@ function renderSohbet(w) {
       ${so && edit ? `<button class="icon-btn" data-a="sohbet" aria-label="Edit sohbet">${ic("edit")}</button>` : ""}</div>
     ${so ? `
       ${so.title ? `<p class="title">${esc(so.title)}</p>` : ""}
-      ${so.notes ? `<div class="notes-box"><div class="lbl">Notes · skim before sohbet</div>${clampBlock("s" + w.id, so.notes)}</div>` : ""}
+      ${so.notes ? `<div class="notes-box"><div class="lbl">Notes · skim before sohbet</div>${clampBlock("s" + w.id, so.notes)}
+        ${owner === me ? `<button class="btn text small move-priv" data-a="toPrivate" data-part="sohbet" data-week="${w.id}">${ic("lock")} Move to My notes</button>` : ""}</div>` : ""}
       ${so.link ? `<div class="actions"><a class="btn outlined" href="${esc(so.link)}" target="_blank" rel="noopener">${ic("link")} Open link</a></div>` : ""}`
     : edit ? `${sampleSohbet()}<button class="btn tonal" data-a="sohbet">${ic("plus")} Add sohbet topic</button>`
     : `<p class="empty" style="margin:0">${esc(nameOf(owner))} will share the sohbet topic and notes here before Thursday.</p>`}
@@ -462,7 +464,8 @@ function renderKonu(w) {
     <p class="title">${esc(k.title)}</p>
     <div class="chips" style="margin-bottom:6px"><span class="chip on">${esc(typeLabel(k.topicType))}</span></div>
     ${k.summary ? `<p class="notes" style="margin-top:8px">${esc(k.summary)}</p>` : ""}
-    ${k.notes ? `<div class="notes-box"><div class="lbl">Prep notes · skim before sohbet</div>${clampBlock("k" + w.id, k.notes)}</div>` : ""}
+    ${k.notes ? `<div class="notes-box"><div class="lbl">Prep notes · skim before sohbet</div>${clampBlock("k" + w.id, k.notes)}
+      ${mine ? `<button class="btn text small move-priv" data-a="toPrivate" data-part="sunum" data-week="${w.id}">${ic("lock")} Move to My notes</button>` : ""}</div>` : ""}
     ${k.link ? `<div class="actions"><a class="btn outlined" href="${esc(k.link)}" target="_blank" rel="noopener">${ic("link")} Open link</a></div>` : ""}
     ${mine ? `<div class="row actions">
       ${!k.notes ? `<button class="btn tonal" data-a="editKonu">${ic("plus")} Add notes for everyone</button>` : ""}
@@ -1162,6 +1165,22 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "rota": rotaSheet(); break;
+    case "toPrivate": {
+      const part = el.dataset.part, wk = S.state.weeks[el.dataset.week];
+      const pub = part === "sunum" ? wk.konu?.notes : part === "sohbet" ? wk.sohbet?.notes : wk.hadis?.notes;
+      if (!pub || !confirm("Move these notes into your private notes? They'll be removed from the card everyone sees.")) break;
+      try {
+        const url = `/api/private?week=${wk.id}&part=${part}&actor=${me}`;
+        const cur = (await apiX(url)).text;
+        await apiX(url, { method: "POST", body: [cur, pub].filter((x) => x?.trim()).join("\n\n") });
+        if (part === "sunum") await act("editKonu", { weekId: wk.id, ...wk.konu, notes: "" });
+        else if (part === "sohbet") await act("setSohbet", { weekId: wk.id, title: wk.sohbet.title, link: wk.sohbet.link, notes: "" });
+        else await act("setHadis", { weekId: wk.id, text: wk.hadis.text, source: wk.hadis.source, notes: "" });
+        toast("Moved to My notes 🔒");
+        const d = document.querySelector(`details.private[data-priv=${part}]`); if (d) d.open = true;
+      } catch (err) { toast(err.message); }
+      break;
+    }
     case "privSave": {
       const d = el.closest("details.private"), st = d.querySelector(".priv-status");
       el.disabled = true; st.textContent = "Saving…";
