@@ -331,7 +331,6 @@ function renderPrompt() {
   if (w.ask) {
     const who = member(w.ask.memberId);
     const remain = w.ask.askedAt + 24 * HOUR - t;
-    const msg = `Selam ${who?.name || ""}! No one volunteered for the sunum this ${day} (${fmtDate(w.id, { month: "short", day: "numeric" })}). Can you present? Answer here: ${location.origin}`;
     return `<section class="hero quiet"><div class="quiet-row">
       ${avatar(w.ask.memberId, "sm")}
       <div class="grow">No volunteer for sunum yet — asking <b>${esc(who?.name)}</b> · ${left(remain)} left</div>
@@ -1297,16 +1296,26 @@ async function personalLink(id) {
   }
   return inviteCache[id];
 }
+/* Share texts: Turkish, English letters only, short and personal */
+const ascii = (t) => String(t)
+  .replace(/[çÇ]/g, (c) => (c === "ç" ? "c" : "C")).replace(/[ğĞ]/g, (c) => (c === "ğ" ? "g" : "G"))
+  .replace(/ı/g, "i").replace(/İ/g, "I").replace(/[öÖ]/g, (c) => (c === "ö" ? "o" : "O"))
+  .replace(/[şŞ]/g, (c) => (c === "ş" ? "s" : "S")).replace(/[üÜ]/g, (c) => (c === "ü" ? "u" : "U"))
+  .normalize("NFD").replace(/[̀-ͯ]/g, "");
+const AYLAR = ["Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran", "Temmuz", "Agustos", "Eylul", "Ekim", "Kasim", "Aralik"];
+const trDay = (id) => { const [, m, d] = id.split("-").map(Number); return `${d} ${AYLAR[m - 1]}`; };
+const hhmm = (t) => (/^\d{1,2}:\d{2}$/.test(t || "") ? t.padStart(5, "0") : t || "");
+const firstName = (full) => { const w = String(full || "").trim().split(/\s+/); return (w[0]?.endsWith(".") && w[1]) ? w[1] : w[0] || ""; };
 function personTemplates(id, link) {
-  const m = member(id), n = m?.name || "";
-  const cw = curWeek(), day = shortDate(cw.id), h = hostOf(cw);
+  const n = ascii(firstName(member(id)?.name));
+  const cw = curWeek(), gun = `bu Persembe (${trDay(cw.id)})`, h = hostOf(cw);
   const t = [
-    { k: "invite", label: "Invite", text: `Selam ${n}! Our Thursday Bros page is up: hadis, sohbet, sunum, host, Geliyorum & chat all in one place. This link is just for you and opens already signed in 👉 ${link}` },
-    { k: "host", label: "Hosting", text: `Selam ${n}! You're down to host Thursday Bros on ${day} inşallah 🏠 Can you confirm here and add the address, time and any details (gate code, parking, food)? 👉 ${link}` },
-    { k: "rsvp", label: "Geliyorum", text: `Selam ${n}! Are you coming Thursday (${day})? Tap Geliyorum / Gelemiyorum here so we know the count 👉 ${link}` },
-    { k: "sunum", label: "Sunum", text: `Selam ${n}! Would you like to give a short sunum (10–15 min) on ${day}? You can pick it and add your topic here 👉 ${link}` },
+    { k: "invite", label: "Invite", text: `Selam ${n}, Persembe sohbetleri icin kucuk bir sayfa actik. Hadis, sohbet, sunum ve yemek sirasi hep orada. Link sana ozel, tiklayinca direkt giris yapiyorsun: ${link}` },
+    { k: "host", label: "Hosting", text: `Selam ${n}, ${gun} yemek sirasi sende insallah. Musaitsen buradan onaylayip adresi ve saati yazar misin? ${link}` },
+    { k: "rsvp", label: "Geliyorum", text: `Selam ${n}, ${gun} geliyor musun? Buradan bir tikla isaretlersen sayiyi bilelim: ${link}` },
+    { k: "sunum", label: "Sunum", text: `Selam ${n}, ${gun} 10-15 dakikalik kisa bir sunum yapmak ister misin? Konuyu buradan secebilirsin: ${link}` },
   ];
-  return t.map((x) => ({ ...x, suggested: x.k === "host" ? h?.id === id && !h.confirmed : false }));
+  return t.map((x) => ({ ...x, text: ascii(x.text), suggested: x.k === "host" ? h?.id === id && !h.confirmed : false }));
 }
 async function personSheet(id, kind) {
   let link; try { link = await personalLink(id); } catch (e) { return toast(e.message); }
@@ -1789,23 +1798,19 @@ document.addEventListener("submit", async (e) => {
 });
 
 function shareWeek() {
-  const w = W();
-  const h = hostOf(w);
-  const place = weekPlace(w);
+  const w = W(), h = hostOf(w), place = weekPlace(w);
   const yes = Object.values(rsvpOf(w)).filter((v) => v === "yes").length;
-  const lines = [`*Thursday Bros · ${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}*`];
-  if (w.cancelled) lines.push("No sohbet this week.");
+  const L = [`*Thursday Bros - ${trDay(w.id)} Persembe*`];
+  if (w.cancelled) L.push("Bu hafta sohbet yok.");
   else {
-    lines.push(detailsReady(w)
-      ? `🏠 ${nameOf(h.id)} hosting · 🕖 ${fmtTime(weekTime(w))}${place ? "\n📍 " + place + "\n" + gmaps(place) : ""}`
-      : `🏠 ${h ? nameOf(h.id) + " hosting (to confirm time & place)" : "Host?"}`);
-    lines.push(`📖 Hadis: ${w.hadis ? (w.hadis.source || "posted") : "—"}`);
-    lines.push(`💬 Sohbet: ${w.sohbet?.title || "—"}`);
-    lines.push(`🎤 Sunum: ${w.konu ? `${w.konu.title} (${nameOf(w.konu.presenterId)})` : "Open — volunteer 👇"}`);
-    lines.push(`✅ Geliyorum: ${yes} · tap to answer 👇`);
+    L.push(detailsReady(w) ? `Ev: ${nameOf(h.id)}, saat ${hhmm(weekTime(w))}${place ? `\nAdres: ${place}` : ""}` : `Ev: ${h ? nameOf(h.id) + " (onay bekleniyor)" : "henuz belli degil"}`);
+    if (w.hadis) L.push(`Hadis: ${nameOf(w.hadis.by)} paylasti`);
+    L.push(w.sohbet?.title ? `Sohbet: ${w.sohbet.title}` : "Sohbet: konu yakinda");
+    L.push(w.konu ? `Sunum: ${nameOf(w.konu.presenterId)} - ${w.konu.title}` : "Sunum: henuz bos, isteyen var mi?");
+    L.push(`${yes ? `${yes} kisi geliyor. ` : ""}Geliyor musun? Buradan isaretle:`);
   }
-  lines.push(location.origin);
-  const text = lines.join("\n");
+  L.push(location.origin);
+  const text = ascii(L.join("\n"));
   if (navigator.share) navigator.share({ text }).catch(() => {});
   else window.open(waLink("", text), "_blank", "noopener");
 }
