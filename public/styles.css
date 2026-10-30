@@ -608,6 +608,5 @@ button.avatar { position: relative; }
 .demo-bar .btn.filled { background: var(--on-tertiary-container); color: var(--tertiary-container); }
 .demo-bar .btn.text { color: inherit; }
 .avatar.guest { background: var(--tertiary-container); color: var(--on-tertiary-container); }
-.wk .tick { width: 14px; height: 14px; border-radius: 50%; display: inline-grid; place-items: center; border: 1.5px solid var(--outline); color: var(--outline); }
-.wk .tick .ic { width: 9px; height: 9px; stroke-width: 3.2; }
-.wk .tick.on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.wk .tick { display: inline-grid; place-items: center; color: var(--primary); }
+.wk .tick .ic { width: 15px; height: 15px; stroke-width: 3; }
