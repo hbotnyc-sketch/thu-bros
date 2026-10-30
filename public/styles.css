@@ -570,3 +570,11 @@ button.avatar { position: relative; }
 .bar .d { font-size: 10.5px; color: var(--on-surface-var); margin-top: 4px; }
 .stat-list li { padding: 8px 0; }
 .ok-dot .ic { width: 18px; height: 18px; color: var(--primary); }
+
+/* personal links */
+.share-btns { display: grid; gap: 8px; margin-top: 12px; }
+.share-btns .btn { width: 100%; }
+#pt-text { font-size: 15px; }
+.claim-q { font-size: 26px; font-weight: 500; margin: 6px 0 8px; letter-spacing: -0.3px; }
+.welcome.claim { background: color-mix(in srgb, var(--surface) 70%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); cursor: default; }
+.mem-actions .icon-btn .ic { width: 17px; height: 17px; }

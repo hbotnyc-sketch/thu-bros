@@ -333,7 +333,7 @@ function renderPrompt() {
     return `<section class="hero quiet"><div class="quiet-row">
       ${avatar(w.ask.memberId, "sm")}
       <div class="grow">No volunteer for sunum yet — asking <b>${esc(who?.name)}</b> · ${left(remain)} left</div>
-      <a class="btn text" href="${waLink(who?.phone, msg)}" target="_blank" rel="noopener">${ic("chat")} Nudge</a>
+      <button type="button" class="btn text" data-a="personShare" data-id="${w.ask.memberId}" data-kind="sunum">${ic("chat")} Nudge</button>
     </div>
     ${canClaim(w) ? `<div class="row" style="margin-top:8px"><button class="btn outlined" data-a="claim" data-week="${w.id}">Actually, I'll take it</button></div>` : ""}
     </section>`;
@@ -550,7 +550,7 @@ function renderHost(w) {
   const skipped = (w.hostSkips || []).filter((x) => member(x));
   const hm = h && member(h.id);
   const nudge = h && !h.confirmed && h.id !== me
-    ? `<a class="btn text small" href="${waLink(hm?.phone, `Selam ${hm?.name}! You're down to host Thursday Bros on ${shortDate(w.id)}. Can you confirm (or skip) here: ${location.origin}`)}" target="_blank" rel="noopener">${ic("chat")} Remind</a>` : "";
+    ? `<button type="button" class="btn text small" data-a="personShare" data-id="${h.id}" data-kind="host">${ic("chat")} Remind</button>` : "";
   return `<section class="card">
     <div class="card-h"><span class="badge">${ic("home")}</span><h3>Host & yemek</h3>
       <button class="icon-btn" data-a="host" aria-label="Change host or details">${ic("edit")}</button></div>
@@ -1286,6 +1286,91 @@ function trackVisit() {
   fetch(`/api/visit?vid=${visitorId()}&actor=${me || ""}`, { method: "POST" }).catch(() => {});
 }
 
+/* ---------- personal links ---------- */
+const inviteCache = {};
+async function personalLink(id) {
+  if (!inviteCache[id]) {
+    const r = await api({ type: "inviteToken", actor: me, id }); // doesn't need a re-render
+    inviteCache[id] = `${location.origin}/?i=${r.token}`;
+  }
+  return inviteCache[id];
+}
+function personTemplates(id, link) {
+  const m = member(id), n = m?.name || "";
+  const cw = curWeek(), day = shortDate(cw.id), h = hostOf(cw);
+  const t = [
+    { k: "invite", label: "Invite", text: `Selam ${n}! Our Thursday Bros page is up: hadis, sohbet, sunum, host, Geliyorum & chat all in one place. This link is just for you and opens already signed in 👉 ${link}` },
+    { k: "host", label: "Hosting", text: `Selam ${n}! You're down to host Thursday Bros on ${day} inşallah 🏠 Can you confirm here and add the address, time and any details (gate code, parking, food)? 👉 ${link}` },
+    { k: "rsvp", label: "Geliyorum", text: `Selam ${n}! Are you coming Thursday (${day})? Tap Geliyorum / Gelemiyorum here so we know the count 👉 ${link}` },
+    { k: "sunum", label: "Sunum", text: `Selam ${n}! Would you like to give a short sunum (10–15 min) on ${day}? You can pick it and add your topic here 👉 ${link}` },
+  ];
+  return t.map((x) => ({ ...x, suggested: x.k === "host" ? h?.id === id && !h.confirmed : false }));
+}
+async function personSheet(id, kind) {
+  let link; try { link = await personalLink(id); } catch (e) { return toast(e.message); }
+  const m = member(id), list = personTemplates(id, link);
+  const cur = kind || (list.find((x) => x.suggested)?.k) || "invite";
+  openSheet({
+    title: `Send to ${esc(m.name)}`, action: null,
+    lead: `A personal link: it opens the site already signed in as ${esc(m.name)} (after a quick “Are you ${esc(m.name)}?”).`,
+    body: `
+    <div class="seg tabs">${list.map((x) => `<label><input type="radio" name="pt" value="${x.k}" ${x.k === cur ? "checked" : ""} data-pt="${id}" /><span>${x.label}${x.suggested ? " ★" : ""}</span></label>`).join("")}</div>
+    <textarea id="pt-text" rows="6">${esc(list.find((x) => x.k === cur).text)}</textarea>
+    <div class="share-btns">
+      <a class="btn filled lg" id="pt-wa" target="_blank" rel="noopener" href="${waLink(m.phone, list.find((x) => x.k === cur).text)}">${ic("chat")} WhatsApp${m.phone ? ` ${esc(m.name)}` : ""}</a>
+      ${navigator.share ? `<button type="button" class="btn tonal lg" data-a="ptShare">${ic("share")} Share…</button>` : ""}
+      <button type="button" class="btn outlined lg" data-a="ptCopy" data-link="${link}">${ic("link")} Copy link</button>
+    </div>
+    ${m.phone ? "" : `<p class="hint">No WhatsApp number saved for ${esc(m.name)}, so WhatsApp will ask who to send it to. Add it in their profile to skip that.</p>`}
+    <p class="hint">Anyone with this link can sign in as ${esc(m.name)}, so send it only to them.</p>`,
+  });
+  const ta = $("#pt-text"), wa = $("#pt-wa");
+  ta.addEventListener("input", () => { wa.href = waLink(m.phone, ta.value); });
+}
+function sendToSheet() {
+  const people = [...members()].filter((m) => m.id !== me).sort((a, b) => a.name.localeCompare(b.name));
+  openSheet({
+    title: "Share", action: null,
+    body: `
+    <button type="button" class="btn tonal lg block" data-a="shareGroup">${ic("share")} Share this week with the group</button>
+    <div class="section-lbl">Or send a personal link to one person</div>
+    <div class="picker-box">${ic("search")}<input type="search" id="pp-q" placeholder="Search people" autocomplete="off" /></div>
+    <ul class="picker-list" id="pp-list">${people.map((m) => `<li><button type="button" data-a="personShare" data-id="${m.id}" data-n="${esc(fold(m.name))}">${avatar(m.id, "sm")}<span>${esc(m.name)}</span></button></li>`).join("")}</ul>`,
+  });
+  $("#pp-q").addEventListener("input", (e) => {
+    const t = fold(e.target.value.trim());
+    document.querySelectorAll("#pp-list button").forEach((b) => { b.parentElement.hidden = t && !b.dataset.n.includes(t); });
+  });
+}
+
+/* opening someone's personal link: /?i=<token> */
+async function handleInviteLink() {
+  const tok = new URLSearchParams(location.search).get("i");
+  if (!tok) return;
+  const clean = () => history.replaceState(null, "", location.pathname);
+  let who; try { who = await apiX(`/api/invite?i=${encodeURIComponent(tok)}`); } catch (e) { clean(); return toast(e.message); }
+  if (me === who.id) return clean();
+  const el = document.createElement("div");
+  el.className = "welcome claim";
+  el.innerHTML = `<div class="welcome-card">
+    <div class="welcome-mark">${logo()}</div>
+    <div class="welcome-lbl">Thursday Bros</div>
+    <h2 class="claim-q">Are you ${esc(who.name)}?</h2>
+    <p class="muted" style="margin:0 0 20px">This link was made for ${esc(who.name)}. Tap yes and this phone will remember you.</p>
+    <button class="btn filled lg block" data-claim="yes">Yes, I'm ${esc(who.name)}</button>
+    <button class="btn text block" data-claim="no" style="margin-top:6px">No, I'm someone else</button></div>`;
+  document.body.appendChild(el);
+  el.addEventListener("click", (e) => {
+    const c = e.target.closest("[data-claim]")?.dataset.claim; if (!c) return;
+    el.remove(); clean();
+    if (c === "yes") {
+      me = who.id; store.set("sohbet.me", me);
+      try { sessionStorage.removeItem("tb.visit"); } catch {}
+      render(); trackVisit(); refreshChatSummary(); toast(`Selam, ${who.name}!`); showWelcomeHadith();
+    }
+  });
+}
+
 /* ---------- site stats (admin) ---------- */
 async function statsSheet() {
   let d; try { d = await apiX(`/api/stats?actor=${me}`); } catch (e) { return toast(e.message); }
@@ -1318,7 +1403,7 @@ async function statsSheet() {
 
     <div class="section-lbl">Not joined yet · ${notYet.length}</div>
     <ul class="list stat-list">${notYet.map((m) => `<li>${avatar(m.id, "sm")}<div class="grow">${esc(m.name)}${m.phone ? "" : ` <span class="small muted">· no number</span>`}</div>
-      <a class="btn text small" href="${invite(m)}" target="_blank" rel="noopener">${ic("chat")} Invite</a></li>`).join("") || `<li class="muted small">Everyone's in 🎉</li>`}</ul>`,
+      <button type="button" class="btn text small" data-a="personShare" data-id="${m.id}" data-kind="invite">${ic("chat")} Invite</button></li>`).join("") || `<li class="muted small">Everyone's in 🎉</li>`}</ul>`,
   });
 }
 
@@ -1656,11 +1741,19 @@ document.addEventListener("click", async (e) => {
       await act("setSettings", { cooldown: S.state.settings.cooldown + +el.dataset.d }).catch(() => {});
       membersSheet();
       break;
-    case "share": shareWeek(); break;
+    case "share": sendToSheet(); break;
+    case "shareGroup": closeSheet(); shareWeek(); break;
+    case "personShare": personSheet(el.dataset.id, el.dataset.kind); break;
+    case "ptCopy": try { await navigator.clipboard.writeText($("#pt-text").value); toast("Message with link copied"); } catch { prompt("Copy this:", el.dataset.link); } break;
+    case "ptShare": navigator.share?.({ text: $("#pt-text").value }).catch(() => {}); break;
   }
 });
 
 document.addEventListener("change", async (e) => {
+  if (e.target.matches?.("[data-pt]")) {
+    const id = e.target.dataset.pt, link = await personalLink(id), t = personTemplates(id, link).find((x) => x.k === e.target.value);
+    $("#pt-text").value = t.text; $("#pt-wa").href = waLink(member(id)?.phone, t.text); return;
+  }
   if (e.target.matches?.("[data-it]")) { installSheet(e.target.value); return; }
   if (e.target.matches?.("[data-tq]")) { const t = $("#sheet-root input[name=time]"); if (t) t.value = e.target.value; return; }
   const el = e.target.closest("[data-change]");
@@ -1756,8 +1849,10 @@ function showWelcomeHadith() {
     }
     if (!S.state.settings.tz) await api({ type: "init", tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
     render();
+    const hasInvite = new URLSearchParams(location.search).has("i");
+    if (hasInvite) await handleInviteLink();
     trackVisit();
-    if (me && member(me)) { showWelcomeHadith(); refreshChatSummary(); } // only once someone has picked their name
+    if (me && member(me) && !document.querySelector(".claim")) { showWelcomeHadith(); refreshChatSummary(); } // only once someone has picked their name
   } catch (e) { showError(e.message); }
   setInterval(() => { if (!$("#sheet-root").innerHTML && document.visibilityState === "visible") refresh(); }, 30000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !$("#sheet-root").innerHTML) refresh(); });
