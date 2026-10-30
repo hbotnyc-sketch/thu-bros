@@ -1,4 +1,4 @@
-# Sohbet
+# Thursday Bros
 
 A one-page web app for our weekly Thursday sohbet: **Hadis**, **Konu** (volunteer topic) and **Host & food**, all in one place.
 

@@ -1,4 +1,4 @@
-// Sohbet — single-page client. No framework: state → render() → event delegation.
+// Thursday Bros — single-page client. No framework: state → render() → event delegation.
 
 /* ---------- tiny helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -172,7 +172,7 @@ function render() {
   const w = W();
   $("#app").innerHTML = `
     <header class="topbar"><div class="topbar-in">
-      <div class="brand">${logo()}Sohbet</div>
+      <div class="brand">${logo()}<span class="wordmark">Thursday Bros</span></div>
       <button class="icon-btn" data-a="share" title="Share this week" aria-label="Share this week">${ic("share")}</button>
       <button class="icon-btn" data-a="members" title="Members & settings" aria-label="Members and settings">${ic("users")}</button>
       <button class="avatar" data-a="switch" title="${esc(nameOf(me))} — switch" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
@@ -190,7 +190,7 @@ function render() {
     </main>`;
 }
 
-const logo = () => `<svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="18" fill="var(--primary)"/><path d="M41 44.5A15 15 0 1 1 30.5 19a12 12 0 0 0 10.5 25.5z" fill="var(--primary-container)"/><circle cx="43" cy="23" r="3" fill="var(--primary-container)"/></svg>`;
+const logo = () => `<svg viewBox="0 0 64 64" aria-hidden="true" class="mark"><rect width="64" height="64" rx="16" fill="var(--on-surface)"/><text x="28" y="43" text-anchor="middle" font-family="'Roboto Flex','Helvetica Neue',Arial,sans-serif" font-weight="800" font-size="30" letter-spacing="-2" fill="var(--surface)">TB</text><circle cx="51.5" cy="40.5" r="3.6" fill="var(--primary)"/></svg>`;
 
 function renderPrompt() {
   const w = curWeek();
@@ -302,9 +302,38 @@ function renderHadis(w) {
       ${h.source ? `<div class="src">— ${esc(h.source)}</div>` : ""}
       ${h.notes ? `<div class="notes-box"><div class="lbl">Discussion notes</div>${clampBlock("h" + w.id, h.notes)}</div>` : ""}
       <div class="small muted" style="margin-top:12px">Shared by ${esc(nameOf(h.by))}</div>`
-    : `<p class="empty">No hadis posted yet for this week.</p>
+    : `${sampleHadis()}
        <button class="btn tonal" data-a="hadis">${ic("plus")} Add hadis</button>`}
   </section>`;
+}
+
+const instr = (t) => `<span class="instr">(${t})</span>`;
+function sampleHadis() {
+  return `<div class="sample" aria-label="Example">
+    <span class="sample-tag">Örnek · instruction sample</span>
+    <p class="quote">Kolaylaştırınız, zorlaştırmayınız; müjdeleyiniz, nefret ettirmeyiniz.
+${instr("hadis metni buraya — Türkçe meal, Arapça ya da ikisi birden")}</p>
+    <div class="src">— Buhârî, İlim 11 ${instr("kaynak: kitap + numara, isteyen açıp bakabilsin")}</div>
+    <div class="notes-box"><div class="lbl">Discussion notes</div><div class="notes">• Dini yaşarken kendimize ve başkalarına nasıl kolaylık gösteririz?
+• Ailede / işte bir örnek
+${instr("isteğe bağlı: sohbeti açmak için 2–3 nokta veya soru")}</div></div>
+    <p class="instr block">(Bu bir örnektir, gerçek hadis eklenince kaybolur. "Add hadis"e bas → metin, kaynak, notlar → Save. Sohbetten 1–2 gün önce eklersen herkes önceden okuyabilir. Sonradan ✎ ile düzenleyebilirsin.)</p>
+  </div>`;
+}
+function sampleKonu() {
+  return `<div class="sample" aria-label="Example">
+    <span class="sample-tag">Örnek · instruction sample</span>
+    <p class="title">Hüvallahüllezî — Haşr 22–24 ${instr("başlık: kısa ve net")}</p>
+    <div class="chips" style="margin-bottom:6px"><span class="chip on">Esma-ül Hüsna</span> ${instr("tür: Esma, Ayet, Siyer, Daily iman…")}</div>
+    <p class="notes" style="margin-top:8px">Haşr suresinin son ayetlerindeki isimler ve günlük hayatımıza yansıması. ${instr("1–2 cümle özet")}</p>
+    <div class="notes-box"><div class="lbl">Prep notes · skim before sohbet</div><div class="notes">Haşr 22: "O, kendisinden başka ilah olmayan Allah'tır; gaybı da görünen âlemi de bilendir…"
+1) Âlimü'l-gaybi ve'ş-şehâde
+2) er-Rahmân, er-Rahîm
+3) el-Melik, el-Kuddûs, es-Selâm
+Soru: Bu isimleri gün içinde nasıl hatırlarız?
+${instr("hazırlık notları: ayet/meal, ana noktalar, sorular — herkes önceden göz atar")}</div></div>
+    <p class="instr block">(Bu bir örnektir. Konuyu alan kişi "Take this week"e basar → başlık + tür yeterli, notları sonradan ✎ ile ekleyebilir. Notları sohbetten bir gün önce eklemek idealdir. 10–15 dk yeter.)</p>
+  </div>`;
 }
 
 function renderKonu(w) {
@@ -314,6 +343,7 @@ function renderKonu(w) {
     return `<section class="card">
       <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Konu</h3></div>
       <p class="empty">${w.cancelled ? "—" : asking}</p>
+      ${w.cancelled ? "" : sampleKonu()}
       ${canClaim(w) ? `<button class="btn tonal" data-a="claim" data-week="${w.id}">${ic("mic")} ${w.ask?.memberId === me ? "Yes, I'll present" : w.id === S.currentWeekId ? "Take this week" : "Take this one"}</button>` : ""}
       ${!w.cancelled && !canClaim(w) && cooldown(me) > 0 ? `<p class="small muted" style="margin:0">You're on a short break — ${cooldown(me)} more ${cooldown(me) === 1 ? "person" : "people"} to go.</p>` : ""}
     </section>`;
@@ -383,6 +413,7 @@ function renderWho() {
   $("#app").innerHTML = `<main class="who-page">
     <div class="logo">${logo()}</div>
     <h1>Selamün aleyküm</h1>
+    <div class="who-brand">Thursday Bros · weekly sohbet</div>
     <p>Tap your name so the group knows who's who. This phone will remember you.</p>
     ${list.length ? `<div class="name-grid">${list.map((m) => `<button data-a="iam" data-id="${m.id}">${avatar(m.id, "sm")}${esc(m.name)}</button>`).join("")}</div>
     <div class="divider">Not in the list?</div>` : ""}
@@ -644,7 +675,7 @@ function shareWeek() {
   const h = hostOf(w);
   const place = weekPlace(w);
   const yes = Object.values(rsvpOf(w)).filter((v) => v === "yes").length;
-  const lines = [`*Sohbet · ${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}*`];
+  const lines = [`*Thursday Bros · ${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}*`];
   if (w.cancelled) lines.push("No sohbet this week.");
   else {
     lines.push(`🏠 ${h ? nameOf(h.id) + " hosting" : "Host?"} · 🕖 ${fmtTime(weekTime(w))}${place ? "\n📍 " + place : ""}`);

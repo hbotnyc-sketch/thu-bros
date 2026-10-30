@@ -335,3 +335,17 @@ body.locked { overflow: hidden; }
 .sheet .list li.now { background: var(--surface-1); border-radius: 12px; padding-inline: 8px; margin-inline: -8px; }
 .sheet .list li.now .date { color: var(--primary); font-weight: 600; }
 .kv a { color: inherit; text-decoration: underline; text-decoration-color: var(--outline); text-underline-offset: 3px; }
+
+/* brand */
+.brand .mark { width: 30px; height: 30px; }
+.wordmark { font-weight: 700; letter-spacing: -0.6px; font-size: 19px; }
+.who-page .logo .mark { width: 60px; height: 60px; }
+.who-brand { font-weight: 600; letter-spacing: -0.2px; color: var(--on-surface-var); margin: -2px 0 10px; }
+
+/* instruction samples */
+.sample { border: 1.5px dashed var(--outline); border-radius: 16px; padding: 14px 14px 10px; margin-bottom: 14px; }
+.sample > *:not(.sample-tag) { opacity: .92; }
+.sample-tag { display: inline-block; font-size: 11.5px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--primary); background: var(--primary-container); padding: 3px 8px; border-radius: 6px; margin-bottom: 10px; }
+.sample .quote { font-size: 16px; }
+.instr { color: var(--primary); font-style: italic; font-size: 13px; font-weight: 400; }
+.instr.block { display: block; margin: 12px 0 2px; line-height: 1.5; }

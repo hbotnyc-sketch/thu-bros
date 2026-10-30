@@ -1,9 +1,9 @@
 {
-  "name": "Sohbet",
-  "short_name": "Sohbet",
+  "name": "Thursday Bros",
+  "short_name": "Thu Bros",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fbfdf9",
-  "theme_color": "#006c4c",
+  "theme_color": "#191c1a",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }
