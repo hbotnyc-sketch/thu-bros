@@ -4,6 +4,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { handleRequest } from "./lib/server.mjs";
+import { handleArchive } from "./lib/archive-server.mjs";
 
 const PORT = +process.env.PORT || 8888;
 const FILE = path.resolve(".data/state.json");
@@ -21,20 +22,38 @@ const fileStore = {
   },
 };
 
+// Local stand-ins for Cloudflare KV / R2 / AI (AI returns canned text).
+const KVFILE = path.resolve(".data/kv.json");
+const kvData = async () => { try { return JSON.parse(await fs.readFile(KVFILE, "utf8")); } catch { return {}; } };
+const kvSave = async (d) => { await fs.mkdir(path.dirname(KVFILE), { recursive: true }); await fs.writeFile(KVFILE, JSON.stringify(d)); };
+const media = new Map();
+const devEnv = {
+  FAKE_AI: true,
+  SOHBET: {
+    async get(k, o) { const d = await kvData(); const v = d[k]; return v == null ? null : o?.type === "json" ? JSON.parse(v) : v; },
+    async put(k, v) { const d = await kvData(); d[k] = v; await kvSave(d); },
+    async delete(k) { const d = await kvData(); delete d[k]; await kvSave(d); },
+  },
+  MEDIA: process.env.NO_MEDIA ? undefined : {
+    async put(k, body) { const chunks = []; for await (const c of body) chunks.push(c); media.set(k, Buffer.concat(chunks)); },
+    async get(k) { const b = media.get(k); return b ? { body: b } : null; },
+    async list({ prefix }) { return { objects: [...media.keys()].filter((k) => k.startsWith(prefix)).sort().map((key) => ({ key, size: media.get(key).length })) }; },
+  },
+};
+
 const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json", ".png": "image/png" };
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
-  if (url.pathname === "/api") {
+  if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
     const chunks = [];
     for await (const c of req) chunks.push(c);
-    const r = await handleRequest(
-      new Request(url, { method: req.method, headers: req.headers, body: chunks.length ? Buffer.concat(chunks) : undefined }),
-      fileStore,
-      Date.now() + offset
-    );
+    const request = new Request(url, { method: req.method, headers: req.headers, body: chunks.length ? Buffer.concat(chunks) : undefined, duplex: "half" });
+    const r = url.pathname === "/api"
+      ? await handleRequest(request, fileStore, Date.now() + offset)
+      : await handleArchive(request, devEnv, fileStore);
     res.writeHead(r.status, Object.fromEntries(r.headers));
-    return res.end(await r.text());
+    return res.end(Buffer.from(await r.arrayBuffer()));
   }
   const p = path.join("public", url.pathname === "/" ? "index.html" : path.normalize(url.pathname));
   try {

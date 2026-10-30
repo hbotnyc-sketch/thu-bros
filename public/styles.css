@@ -366,3 +366,58 @@ body.locked { overflow: hidden; }
 .picker-list button b { font-weight: 700; color: var(--primary); }
 .picker-list button.new { color: var(--primary); font-weight: 500; }
 .picker-list button.new .ic { width: 28px; height: 28px; padding: 5px; border-radius: 50%; background: var(--primary-container); }
+
+/* archive list */
+.archive .search { margin: 0 0 6px; border-radius: 14px; border-width: 1px; }
+.archive .search input { padding: 11px 0; font-size: 15px; }
+.archive .list li { padding: 0; }
+.arch-row { width: 100%; display: flex; align-items: flex-start; gap: 12px; padding: 12px 2px; border: 0; background: transparent; text-align: left; cursor: pointer; border-radius: 12px; }
+.arch-row:hover { background: var(--surface-1); }
+.arch-row .date { width: 54px; flex: none; font-size: 14px; font-weight: 500; color: var(--on-surface); line-height: 1.2; }
+.arch-row .date small { display: block; font-size: 11.5px; font-weight: 400; color: var(--on-surface-var); }
+.arch-row .grow { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.arch-row .t { font-weight: 500; }
+.arch-row .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.arch-row .tags .chip { height: 22px; font-size: 11.5px; padding: 0 8px; }
+.arch-row .chev { transform: rotate(-90deg); color: var(--on-surface-var); width: 18px; height: 18px; margin-top: 2px; }
+
+/* detail */
+.d-title { font-size: 22px; font-weight: 500; margin: 0 0 10px; letter-spacing: -0.2px; }
+.d-summary { font-size: 16px; line-height: 1.6; margin: 0 0 6px; }
+.d-sec { margin: 16px 0 0; }
+.d-sec .lbl { font-size: 12px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--on-surface-var); margin-bottom: 4px; }
+.d-sec .notes { margin-top: 0; }
+.d-plan { margin-top: 20px; padding: 4px 16px 16px; background: var(--surface-1); border-radius: 16px; }
+.audio-list { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.audio-list li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--on-surface-var); }
+.audio-list audio { flex: 1; height: 36px; min-width: 0; }
+.d-tx { margin-top: 18px; border-top: 1px solid var(--outline-var); padding-top: 12px; }
+.d-tx summary { cursor: pointer; font-weight: 500; color: var(--primary); }
+.d-tx .notes { font-size: 14px; color: var(--on-surface-var); margin-top: 10px; }
+
+/* notes editor */
+.src-tools { background: var(--surface-1); border-radius: 16px; padding: 14px; margin-bottom: 8px; }
+.src-tools textarea { background: var(--surface); }
+.seg.att label span { height: 32px; font-size: 13.5px; padding: 0 12px; }
+.spinner.sm { width: 16px; height: 16px; border-width: 2px; display: inline-block; vertical-align: -3px; border-color: color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor; }
+
+/* recorder */
+.rec { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 16px 0; }
+.rec-dot { width: 14px; height: 14px; border-radius: 50%; background: #e5484d; animation: blink 1.2s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+.rec-time { font-size: 56px; font-weight: 300; letter-spacing: -1px; font-variant-numeric: tabular-nums; margin: 8px 0 14px; }
+.rec-level { width: 100%; max-width: 360px; height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin-bottom: 12px; }
+.rec-level span { display: block; height: 100%; width: 0; background: var(--primary); transition: width .1s; border-radius: 4px; }
+.rec-stop { max-width: 360px; margin: 18px 0; background: #e5484d !important; color: #fff !important; }
+.rec-tx { width: 100%; text-align: left; white-space: pre-wrap; font-size: 14px; color: var(--on-surface-var); background: var(--surface-1); border-radius: 14px; padding: 12px 14px; min-height: 60px; }
+.rec-tx:empty { display: none; }
+
+/* host card: status + address */
+.person .sub .ok { color: var(--primary); font-weight: 500; display: inline-flex; align-items: center; gap: 3px; }
+.person .sub .ok .ic { width: 14px; height: 14px; }
+.addr { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 12px; }
+.addr > .ic { width: 18px; height: 18px; color: var(--on-surface-var); margin-top: 3px; }
+.addr-t { font-size: 15px; font-weight: 500; }
+.btn.small { height: 32px; padding: 0 14px; font-size: 13px; }
+label.check { display: flex; align-items: center; gap: 8px; margin: 10px 2px 0; font-size: 14px; color: var(--on-surface-var); cursor: pointer; }
+label.check input { width: 18px; height: 18px; accent-color: var(--primary); }

@@ -6,6 +6,10 @@
   "assets": { "directory": "./public", "binding": "ASSETS" },
   "kv_namespaces": [{ "binding": "SOHBET", "id": "d4cb6277155b4e62afb8a78f488be349" }],
   "triggers": { "crons": ["0 * * * *"] },
+  // Workers AI: Whisper transcription of recorded parts (free daily allowance)
+  "ai": { "binding": "AI" },
+  // Claude summaries use the ANTHROPIC_API_KEY secret (set in the Cloudflare dashboard, never in this file).
+  // Audio storage: once R2 is enabled, add  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "thu-bros-media" }]
   "workers_dev": true,
   "observability": { "logs": { "enabled": true, "invocation_logs": true } }
 }

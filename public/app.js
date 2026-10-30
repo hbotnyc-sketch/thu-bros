@@ -31,6 +31,12 @@ const ICONS = {
   food: '<path d="M3 11h18a9 9 0 0 1-18 0zM7 7c0-1.5 1-2 1-3.5M12 7c0-1.5 1-2 1-3.5M17 7c0-1.5 1-2 1-3.5"/>',
   trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
   ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  notes: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  rec: '<circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>',
+  upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
+  wand: '<path d="m15 4 5 5L9 20H4v-5zM13 6l5 5"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   swap: '<path d="M16 3l4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/>',
 };
 const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
@@ -143,7 +149,7 @@ function openSheet({ title, lead = "", body, action = "Save", danger = "" }, onS
   });
 }
 function closeSheet() { $("#sheet-root").innerHTML = ""; sheetSubmit = null; document.body.classList.remove("locked"); }
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !activeRec) closeSheet(); });
 
 /* ---------- derived ---------- */
 const W = () => S.state.weeks[sel];
@@ -156,6 +162,8 @@ function canClaim(w) {
   if (isCur && !w.ask && now() >= S.weekMeta[w.id].cutoff) return true; // queue exhausted → anyone
   return cooldown(me) === 0;
 }
+const gmaps = (a) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a)}`;
+const amaps = (a) => `https://maps.apple.com/?q=${encodeURIComponent(a)}`;
 const hostOf = (w) => S.hosts?.[w.id] || null;
 const weekTime = (w) => w.customTime || S.state.settings.defaultTime;
 const weekPlace = (w) => w.place || member(hostOf(w)?.id)?.address || "";
@@ -189,6 +197,7 @@ function render() {
       <button class="avatar" data-a="switch" title="${esc(nameOf(me))} — switch" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
     </div></header>
     <main class="wrap">
+      ${renderHostPrompt()}
       ${renderPrompt()}
       ${renderWeekTabs()}
       ${renderWeekHead(w)}
@@ -197,12 +206,35 @@ function render() {
       ${renderSohbet(w)}
       ${renderKonu(w)}
       ${renderHost(w)}
+      ${w.id === S.currentWeekId && !w.cancelled ? renderRecapCard(w) : ""}
       ${renderArchive()}
       <p class="foot-note">Selam, ${esc(nameOf(me))} · Allah kabul etsin</p>
     </main>`;
 }
 
 const logo = () => `<svg viewBox="0 0 64 64" aria-hidden="true" class="mark"><rect width="64" height="64" rx="16" fill="var(--on-surface)"/><text x="28" y="43" text-anchor="middle" font-family="'Roboto Flex','Helvetica Neue',Arial,sans-serif" font-weight="800" font-size="30" letter-spacing="-2" fill="var(--surface)">TB</text><circle cx="51.5" cy="40.5" r="3.6" fill="var(--primary)"/></svg>`;
+
+function renderHostPrompt() {
+  const w = curWeek();
+  if (w.cancelled) return "";
+  const h = hostOf(w), day = shortDate(w.id);
+  const skipped = (w.hostSkips || []).filter((x) => member(x));
+  if (!h) return `<section class="hero warn">
+      <div class="deco">${ic("home")}</div>
+      <h2>No host yet for ${esc(day)}</h2>
+      <p>Everyone in the yemek sırası has passed this week. Can you host?</p>
+      <button class="btn filled lg" data-a="hostYes">${ic("home")} I can host</button></section>`;
+  if (h.id !== me || h.confirmed) return "";
+  return `<section class="hero warn">
+    <div class="deco">${ic("home")}</div>
+    <span class="chip">${ic("home")} Yemek sırası</span>
+    <h2>${skipped.length ? `${esc(skipped.map(nameOf).join(", "))} can't host this week — can you host on ${esc(day)}?` : `You're hosting on ${esc(day)} 🏠`}</h2>
+    <p>${skipped.length ? "If you can't either, it'll ask the next person in the order." : "Please confirm and share the address and any details: gate code, parking, food…"}</p>
+    <div class="row">
+      <button class="btn filled lg" data-a="hostYes">${ic("check")} Yes, I'll host</button>
+      <button class="btn text" data-a="hostSkip">${skipped.length ? "I can't" : "Skip this week"}</button>
+    </div></section>`;
+}
 
 function renderPrompt() {
   const w = curWeek();
@@ -282,7 +314,7 @@ function renderWeekTabs() {
     const h = hostOf(w);
     const sub = w.cancelled ? `<span class="small muted">No sohbet</span>` :
       `<span class="dot ${w.hadis ? "full" : ""}" title="Hadis"></span><span class="dot ${w.konu ? "full" : ""}" title="Konu"></span>
-       <span class="wk-host">${h ? esc(nameOf(h.id)) : "Host?"}</span>`;
+       <span class="wk-host">${h ? esc(nameOf(h.id)) + (h.confirmed ? " ✓" : "") : "Host?"}</span>`;
     return `<button class="wk ${id === sel ? "sel" : ""}" data-a="week" data-id="${id}">
       <small>${label}</small><b>${fmtDate(id, { month: "short", day: "numeric" })}</b><span class="dots">${sub}</span></button>`;
   }).join("")}</nav>`;
@@ -415,18 +447,25 @@ function renderHost(w) {
   const yes = Object.keys(r).filter((id) => r[id] === "yes" && member(id));
   const no = Object.keys(r).filter((id) => r[id] === "no" && member(id));
   const mine = r[me];
-  const mapsUrl = place ? `https://maps.google.com/?q=${encodeURIComponent(place)}` : "";
+  const skipped = (w.hostSkips || []).filter((x) => member(x));
+  const hm = h && member(h.id);
+  const nudge = h && !h.confirmed && h.id !== me
+    ? `<a class="btn text small" href="${waLink(hm?.phone, `Selam ${hm?.name}! You're down to host Thursday Bros on ${shortDate(w.id)}. Can you confirm (or skip) here: ${location.origin}`)}" target="_blank" rel="noopener">${ic("chat")} Remind</a>` : "";
   return `<section class="card">
     <div class="card-h"><span class="badge">${ic("home")}</span><h3>Host & yemek</h3>
       <button class="icon-btn" data-a="host" aria-label="Change host or details">${ic("edit")}</button></div>
     ${h ? `<div class="person">${avatar(h.id, "lg")}<div style="flex:1;min-width:0"><div class="who">${esc(nameOf(h.id))}${h.id === me ? ' <span class="muted small">(you)</span>' : ""}</div>
-        <div class="sub">${h.changed ? "Changed for this week" : "Yemek sırası"}</div></div>
-        <button class="btn text" data-a="rota">Sıra</button></div>`
-      : `<p class="empty">No host yet. Set up the yemek sırası once and it fills every week.</p>
-         <button class="btn tonal" data-a="rotaEdit" style="margin-bottom:12px">${ic("plus")} Set yemek sırası</button>`}
-    ${place || w.hostNotes ? `<div class="kv">
-      ${place ? `${ic("pin")}<div><a href="${mapsUrl}" target="_blank" rel="noopener">${esc(place)}</a></div>` : ""}
-      ${w.hostNotes ? `${ic("food")}<div style="white-space:pre-wrap">${esc(w.hostNotes)}</div>` : ""}</div>` : ""}
+        <div class="sub">${h.confirmed ? `<span class="ok">${ic("check")} Confirmed</span>` : "Waiting to confirm"}${skipped.length ? ` · covering for ${esc(skipped.map(nameOf).join(", "))}` : h.changed ? " · swapped" : ""}</div></div>
+        ${nudge || `<button class="btn text" data-a="rota">Sıra</button>`}</div>
+        ${h.id === me && !h.confirmed && w.id !== S.currentWeekId ? `<div class="row" style="margin:-4px 0 12px"><button class="btn tonal" data-a="hostYes">${ic("check")} Confirm</button><button class="btn text" data-a="hostSkip">Skip this week</button></div>` : ""}
+        ${h.id === me && h.confirmed ? `<button class="btn text small" data-a="hostYes" style="margin:-6px 0 8px;padding-left:0">${ic("edit")} Update address & notes</button>` : ""}`
+      : (S.state.settings.hostRota || []).length
+        ? `<p class="empty">No host yet — everyone in the order passed.</p><button class="btn tonal" data-a="hostYes" style="margin-bottom:12px">${ic("home")} I can host</button>`
+        : `<p class="empty">No host yet. Set up the yemek sırası once and it fills every week.</p>
+           <button class="btn tonal" data-a="rotaEdit" style="margin-bottom:12px">${ic("plus")} Set yemek sırası</button>`}
+    ${place ? `<div class="addr">${ic("pin")}<div style="flex:1;min-width:0"><div class="addr-t">${esc(place)}</div>
+        <div class="row" style="margin-top:8px"><a class="btn outlined small" href="${gmaps(place)}" target="_blank" rel="noopener">Google Maps</a><a class="btn outlined small" href="${amaps(place)}" target="_blank" rel="noopener">Apple Maps</a></div></div></div>` : ""}
+    ${w.hostNotes ? `<div class="notes-box" style="margin-top:0;margin-bottom:12px"><div class="lbl">Notes from host</div><div class="notes">${esc(w.hostNotes)}</div></div>` : ""}
     ${w.cancelled ? "" : `<div class="rsvp">
       <div class="section-lbl" style="margin-top:4px">Geliyor musun?</div>
       <div class="seg2" role="group" aria-label="Attendance">
@@ -440,14 +479,49 @@ function renderHost(w) {
   </section>`;
 }
 
+let archiveQ = "";
+const weekTitle = (w) => w.recap?.title || w.sohbet?.title || w.konu?.title || "Sohbet";
+function pastWeeks() {
+  return Object.values(S.state.weeks)
+    .filter((w) => w.id < S.currentWeekId && !w.cancelled && (w.recap || w.konu || w.hadis || w.sohbet))
+    .sort((a, b) => (a.id < b.id ? 1 : -1));
+}
+function archiveRows() {
+  const t = fold(archiveQ.trim());
+  const rows = pastWeeks().filter((w) => !t || fold([
+    weekTitle(w), ...(w.recap?.tags || []), w.recap?.snippet, w.sohbet?.title, w.konu?.title, w.hadis?.source, w.hadis?.text,
+    w.konu && nameOf(w.konu.presenterId), fmtDate(w.id, { month: "long", year: "numeric" }),
+  ].filter(Boolean).join(" ")).includes(t));
+  if (!rows.length) return `<li class="muted small" style="padding:14px 2px">${t ? "Nothing found." : "No past sohbets yet."}</li>`;
+  return rows.map((w) => `<li><button class="arch-row" data-a="detail" data-week="${w.id}">
+    <span class="date">${fmtDate(w.id, { month: "short", day: "numeric" })}<small>${fmtDate(w.id, { year: "numeric" })}</small></span>
+    <span class="grow"><span class="t">${esc(weekTitle(w))}</span>
+      <span class="small muted">${[w.konu && "Sunum: " + nameOf(w.konu.presenterId), w.recap ? "📝 notes" : "", w.recap?.audioParts ? "🎧 audio" : ""].filter(Boolean).map(esc).join(" · ")}</span>
+      ${w.recap?.tags?.length ? `<span class="tags">${w.recap.tags.slice(0, 4).map((x) => `<span class="chip">${esc(x)}</span>`).join("")}</span>` : ""}</span>
+    ${ic("down").replace('class="ic"', 'class="ic chev"')}</button></li>`).join("");
+}
 function renderArchive() {
-  const past = Object.values(S.state.weeks).filter((w) => w.id < S.currentWeekId && w.konu && !w.cancelled).sort((a, b) => (a.id < b.id ? 1 : -1));
-  if (!past.length) return "";
-  return `<section class="archive"><h2>Past topics</h2><ul class="list">${past.slice(0, 30).map((w) => `
-    <li><span class="date">${fmtDate(w.id, { month: "short", day: "numeric" })}</span>
-      <div class="grow"><div>${esc(w.konu.title)}</div><div class="small muted">${esc(nameOf(w.konu.presenterId))} · ${esc(typeLabel(w.konu.topicType))}</div></div>
-      ${w.konu.presenterId === me ? `<button class="btn text small" data-a="unpresent" data-week="${w.id}">Didn't present</button>` : ""}</li>`).join("")}
-  </ul></section>`;
+  if (!pastWeeks().length) return "";
+  return `<section class="archive"><h2>Geçmiş sohbetler</h2>
+    <div class="picker-box search">${ic("search")}<input type="search" id="arch-q" placeholder="Search topics, tags, names…" value="${esc(archiveQ)}" aria-label="Search past sohbets" /></div>
+    <ul class="list" id="arch-list">${archiveRows()}</ul></section>`;
+}
+document.addEventListener("input", (e) => {
+  if (e.target.id === "arch-q") { archiveQ = e.target.value; const l = $("#arch-list"); if (l) l.innerHTML = archiveRows(); }
+});
+
+function renderRecapCard(w) {
+  const r = w.recap;
+  return `<section class="card">
+    <div class="card-h"><span class="badge">${ic("notes")}</span><h3>Notlar · Recap</h3>
+      ${r ? `<button class="icon-btn" data-a="recap" data-week="${w.id}" aria-label="Edit notes">${ic("edit")}</button>` : ""}</div>
+    ${r ? `<p class="title">${esc(r.title || "Notes")}</p>${r.snippet ? `<p class="notes" style="margin-top:0">${esc(r.snippet)}…</p>` : ""}
+      <div class="row actions"><button class="btn tonal" data-a="detail" data-week="${w.id}">Open notes</button>
+      <button class="btn text" data-a="record" data-week="${w.id}">${ic("rec")} Record more</button></div>`
+    : `<p class="empty">During or after the sohbet: record it, upload audio, paste a transcript, or type notes. It all goes into Geçmiş sohbetler.</p>
+      <div class="row"><button class="btn filled" data-a="record" data-week="${w.id}">${ic("rec")} Record sohbet</button>
+      <button class="btn tonal" data-a="recap" data-week="${w.id}">${ic("notes")} Add notes</button></div>`}
+  </section>`;
 }
 
 /* ---------- who are you ---------- */
@@ -543,6 +617,26 @@ function hostSheet(w) {
     <label class="field"><span>Time</span><input type="time" name="time" value="${esc(weekTime(w))}" /></label>
     <label class="field"><span>Notes <i>optional</i></span><textarea name="hostNotes" rows="3" maxlength="1000" placeholder="e.g. Parking on the street, dinner after sohbet">${esc(w.hostNotes)}</textarea></label>`,
   }, async (f) => { await act("setHost", { weekId: w.id, ...f }); toast("Saved"); });
+}
+
+function confirmHostSheet(w) {
+  const mine = member(me);
+  const h = hostOf(w);
+  const updating = h?.id === me && h.confirmed;
+  openSheet({
+    title: updating ? "Hosting details" : "Confirm hosting",
+    lead: `${weekLabel(w)} · everyone sees this on the site.`,
+    action: updating ? "Save" : "Confirm",
+    body: `
+    <label class="field"><span>Address</span><input type="text" name="place" maxlength="200" value="${esc(w.place || mine?.address || "")}" placeholder="Street, city" autocomplete="street-address" />
+      <label class="check"><input type="checkbox" name="saveAddress" value="1" checked /> Remember as my home address</label></label>
+    <label class="field"><span>Time</span><input type="time" name="time" value="${esc(weekTime(w))}" /></label>
+    <label class="field"><span>Notes for everyone <i>optional</i></span><textarea name="hostNotes" rows="4" maxlength="1000" placeholder="Gate code, where to park, which door, food plans…">${esc(w.hostNotes)}</textarea></label>`,
+  }, async (f) => {
+    if (!f.place?.trim()) { toast("Add the address so people can find you"); throw 0; }
+    await act("confirmHost", { weekId: w.id, place: f.place, time: f.time, hostNotes: f.hostNotes, saveAddress: !!f.saveAddress });
+    toast(updating ? "Saved" : "Jazakallah — you're hosting!");
+  });
 }
 
 function rotaSheet() {
@@ -685,6 +779,285 @@ function editMemberSheet(id) {
   });
 }
 
+/* ---------- archive: notes, transcripts, recording ---------- */
+async function apiX(path, opts = {}) {
+  const r = await fetch(path, opts);
+  let j; try { j = await r.json(); } catch { throw new Error("Can't reach the server"); }
+  if (!r.ok) throw new Error(j.error || "Something went wrong");
+  return j;
+}
+const loadRecap = (id) => apiX(`/api/recap?week=${id}`);
+const bullets = (t) => esc(t || "");
+const wordCount = (t) => (t.trim().match(/\S+/g) || []).length;
+
+async function openDetail(id) {
+  let d;
+  try { d = await loadRecap(id); } catch (e) { return toast(e.message); }
+  const w = S.state.weeks[id], r = d.recap || {}, meta = w.recap || {};
+  const att = (r.attendees || meta.attendees || []).filter((x) => member(x));
+  const sec = (label, txt) => txt ? `<div class="d-sec"><div class="lbl">${label}</div><div class="notes">${bullets(txt)}</div></div>` : "";
+  openSheet({
+    title: fmtDate(id, { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
+    action: null,
+    body: `
+    <h3 class="d-title">${esc(r.title || weekTitle(w))}</h3>
+    ${r.tags?.length ? `<div class="chips" style="margin-bottom:12px">${r.tags.map((t) => `<span class="chip on">${esc(t)}</span>`).join("")}</div>` : ""}
+    ${r.summary ? `<p class="d-summary">${esc(r.summary)}</p>` : `<p class="muted">No notes yet for this sohbet.</p>`}
+    ${sec("Hadis", r.hadis)}${sec("Sohbet", r.sohbet)}${sec("Sunum", r.sunum)}${sec("Questions", r.questions)}
+    ${att.length ? `<div class="d-sec"><div class="lbl">Who came · ${att.length}</div><div class="faces">${att.map((x) => `<span title="${esc(nameOf(x))}">${avatar(x, "sm")}</span>`).join("")}</div>
+      <div class="small muted" style="margin-top:6px">${esc(att.map(nameOf).join(", "))}</div></div>` : ""}
+    <div class="row" style="margin:14px 0 6px"><button type="button" class="btn tonal" data-a="recap" data-week="${id}">${ic("edit")} ${d.recap ? "Edit notes" : "Add notes"}</button></div>
+
+    <div class="d-plan">
+      <div class="section-lbl">What was planned</div>
+      ${w.hadis ? `<div class="d-sec"><div class="lbl">Hadis</div><p class="quote" style="font-size:15px">${esc(w.hadis.text)}</p>${w.hadis.source ? `<div class="src">— ${esc(w.hadis.source)}</div>` : ""}</div>` : ""}
+      ${w.sohbet ? `<div class="d-sec"><div class="lbl">Sohbet · ${esc(nameOf(w.sohbet.by))}</div>${w.sohbet.title ? `<b style="font-weight:500">${esc(w.sohbet.title)}</b>` : ""}${w.sohbet.notes ? clampBlock("ds" + id, w.sohbet.notes) : ""}</div>` : ""}
+      ${w.konu ? `<div class="d-sec"><div class="lbl">Sunum · ${esc(nameOf(w.konu.presenterId))}</div><b style="font-weight:500">${esc(w.konu.title)}</b>${w.konu.notes ? clampBlock("dk" + id, w.konu.notes) : ""}
+        ${w.konu.presenterId === me ? `<div><button type="button" class="btn text small" data-a="unpresent" data-week="${id}" style="padding-left:0">I didn't present this</button></div>` : ""}</div>` : ""}
+    </div>
+
+    ${d.audio.length ? `<div class="d-sec"><div class="lbl">Recording · ${d.audio.length} part${d.audio.length > 1 ? "s" : ""}</div>
+      <ol class="audio-list">${d.audio.map((a, i) => `<li><span>Part ${i + 1}</span><audio controls preload="none" src="/api/audio?key=${encodeURIComponent(a.key)}"></audio></li>`).join("")}</ol></div>` : ""}
+    ${d.transcript ? `<details class="d-tx"><summary>Transcript · ${wordCount(d.transcript).toLocaleString()} words</summary><div class="notes">${esc(d.transcript)}</div></details>` : ""}`,
+  });
+}
+
+function recapSheet(id, preset = {}) {
+  return loadRecap(id).then((d) => {
+    const w = S.state.weeks[id];
+    const r = { ...(d.recap || {}), ...(preset.keep || {}), ...(preset.draft || {}) };
+    const transcript = preset.transcript ?? d.transcript ?? "";
+    const going = Object.entries(w.rsvp || {}).filter(([, v]) => v === "yes").map(([k]) => k);
+    const att = new Set(r.attendees?.length ? r.attendees : going);
+    const sorted = [...members()].sort((a, b) => a.name.localeCompare(b.name));
+    openSheet({
+      title: d.recap ? "Edit notes" : "Sohbet notes",
+      lead: `${weekLabel(w)} · anyone can add or edit.`,
+      body: `
+      <div class="src-tools">
+        <div class="section-lbl" style="margin-top:0">1 · Transcript <i class="muted small" style="font-style:normal">(optional)</i></div>
+        <div class="row" style="margin-bottom:10px">
+          <button type="button" class="btn outlined" data-a="record" data-week="${id}">${ic("rec")} Record</button>
+          <label class="btn outlined" style="cursor:pointer">${ic("upload")} Upload audio<input type="file" accept="audio/*,video/mp4" data-change="upload" data-week="${id}" hidden /></label>
+        </div>
+        <textarea name="transcript" id="rc-tx" rows="5" placeholder="…or paste a transcript here (e.g. from Voice Memos)">${esc(transcript)}</textarea>
+        <div class="row" style="margin-top:8px;justify-content:space-between">
+          <span class="small muted" id="rc-wc">${transcript ? wordCount(transcript).toLocaleString() + " words" : ""}</span>
+          <button type="button" class="btn tonal" data-a="summarize" data-week="${id}" ${d.aiEnabled ? "" : "disabled title=\"Claude isn't connected yet\""}>${ic("wand")} Summarize with Claude</button>
+        </div>
+        ${d.aiEnabled ? "" : `<p class="hint">Claude summaries turn on once the API key is added in Cloudflare.</p>`}
+      </div>
+      <div class="section-lbl">2 · Notes ${preset.draft ? `<span class="chip on" style="margin-left:6px">Claude draft — please review</span>` : ""}</div>
+      <label class="field"><span>Title</span><input type="text" name="title" maxlength="140" value="${esc(r.title)}" placeholder="e.g. Tevekkül ve sabır" /></label>
+      <label class="field"><span>Summary</span><textarea name="summary" rows="4" placeholder="A few sentences about the night">${esc(r.summary)}</textarea></label>
+      <label class="field"><span>Hadis</span><textarea name="hadis" rows="3" placeholder="• What we discussed">${esc(r.hadis)}</textarea></label>
+      <label class="field"><span>Sohbet</span><textarea name="sohbet" rows="4" placeholder="• Main points">${esc(r.sohbet)}</textarea></label>
+      <label class="field"><span>Sunum</span><textarea name="sunum" rows="3" placeholder="• Takeaways">${esc(r.sunum)}</textarea></label>
+      <label class="field"><span>Questions</span><textarea name="questions" rows="3" placeholder="• Questions raised or left open">${esc(r.questions)}</textarea></label>
+      <label class="field"><span>Tags <i>comma separated</i></span><input type="text" name="tags" value="${esc((r.tags || []).join(", "))}" placeholder="tevekkül, Haşr 22, el-Kuddûs" /></label>
+      <div class="field"><span>Who came</span><div class="seg att">${sorted.map((m) => `<label><input type="checkbox" name="att" value="${m.id}" ${att.has(m.id) ? "checked" : ""}/><span>${esc(m.name)}</span></label>`).join("")}</div></div>`,
+    }, async (f) => {
+      const body = {
+        actor: me, title: f.title, summary: f.summary, hadis: f.hadis, sohbet: f.sohbet, sunum: f.sunum, questions: f.questions,
+        tags: String(f.tags || "").split(",").map((t) => t.trim()).filter(Boolean),
+        attendees: [...document.querySelectorAll("#sheet-root input[name=att]:checked")].map((x) => x.value),
+        transcript: $("#rc-tx")?.value ?? "",
+      };
+      if (!body.title && !body.summary && !body.sohbet && !body.hadis && !body.sunum && !body.transcript.trim()) { toast("Add a title, some notes, or a transcript"); throw 0; }
+      try { S = await apiX(`/api/recap?week=${id}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); }
+      catch (e) { toast(e.message); throw e; }
+      render();
+      toast("Saved to Geçmiş sohbetler");
+    });
+    const tx = $("#rc-tx");
+    tx?.addEventListener("input", () => { $("#rc-wc").textContent = tx.value.trim() ? wordCount(tx.value).toLocaleString() + " words" : ""; });
+  }).catch((e) => toast(e.message));
+}
+
+async function summarizeInto(id, btn) {
+  const tx = $("#rc-tx")?.value || "";
+  if (tx.trim().length < 40) return toast("Paste or record a transcript first");
+  const w = S.state.weeks[id];
+  btn.disabled = true; const label = btn.innerHTML; btn.innerHTML = `<span class="spinner sm"></span> Summarizing…`;
+  try {
+    const { draft } = await apiX("/api/summarize", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ transcript: tx, context: {
+        date: weekLabel(w),
+        hadis: w.hadis ? `${w.hadis.text.slice(0, 300)} (${w.hadis.source || ""})` : "",
+        sohbet: w.sohbet?.title || "", sunum: w.konu ? `${w.konu.title} — ${nameOf(w.konu.presenterId)}` : "",
+      } }),
+    });
+    const f = $("#sheet-root form");
+    for (const k of ["title", "summary", "hadis", "sohbet", "sunum", "questions"]) if (draft[k]) f.elements[k].value = draft[k];
+    if (draft.tags?.length) f.elements.tags.value = draft.tags.join(", ");
+    toast("Draft ready — review, then Save");
+    f.elements.title.scrollIntoView({ behavior: "smooth", block: "center" });
+  } catch (e) { toast(e.message); }
+  btn.disabled = false; btn.innerHTML = label;
+}
+
+/* audio helpers: 16 kHz mono WAV parts, ~60s each */
+const PART_SECONDS = window.__partSeconds || 60, OUT_RATE = 16000;
+function downsample(f32, inRate) {
+  const ratio = inRate / OUT_RATE, len = Math.floor(f32.length / ratio), out = new Int16Array(len);
+  for (let i = 0; i < len; i++) {
+    const a = Math.floor(i * ratio), b = Math.min(f32.length, Math.floor((i + 1) * ratio));
+    let sum = 0; for (let j = a; j < b; j++) sum += f32[j];
+    const v = Math.max(-1, Math.min(1, sum / Math.max(1, b - a)));
+    out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  return out;
+}
+function wavBlob(pcm) {
+  const buf = new ArrayBuffer(44 + pcm.length * 2), v = new DataView(buf);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, "RIFF"); v.setUint32(4, 36 + pcm.length * 2, true); str(8, "WAVE"); str(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, OUT_RATE, true);
+  v.setUint32(28, OUT_RATE * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, pcm.length * 2, true);
+  new Int16Array(buf, 44).set(pcm);
+  return new Blob([buf], { type: "audio/wav" });
+}
+async function blobB64(blob) {
+  const u = new Uint8Array(await blob.arrayBuffer()); let s = "";
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+/** Sends parts one at a time: keep audio (if storage is on) → transcribe → save running transcript. */
+class Pipeline {
+  constructor(week, startPart, baseText, onUpdate) {
+    Object.assign(this, { week, next: startPart, base: baseText.trim(), onUpdate, parts: [], done: 0, total: 0, failed: 0 });
+    this.q = Promise.resolve();
+  }
+  add(blob) {
+    const i = this.next++, k = this.total++;
+    this.q = this.q.then(() => this.process(i, k, blob));
+    return this.q;
+  }
+  async process(i, k, blob) {
+    try {
+      await fetch(`/api/audio?week=${this.week}&part=${i}`, { method: "PUT", body: blob }).catch(() => {});
+      const { text } = await apiX(`/api/transcribe?week=${this.week}&part=${i}`, { method: "POST", body: await blobB64(blob) });
+      this.parts[k] = text;
+    } catch (e) {
+      this.parts[k] = `[part ${i + 1}: transcription failed]`; this.failed++; this.lastError = e.message;
+    }
+    this.done++;
+    await fetch(`/api/transcript?week=${this.week}`, { method: "POST", body: this.text() }).catch(() => {});
+    this.onUpdate?.(this);
+  }
+  text() { return [this.base, this.parts.filter(Boolean).join("\n")].filter(Boolean).join("\n\n"); }
+  drain() { return this.q; }
+}
+
+function editorDraft() {
+  const f = $("#sheet-root form"); if (!f || !$("#rc-tx")) return null;
+  const v = (k) => f.elements[k]?.value || "";
+  return { title: v("title"), summary: v("summary"), hadis: v("hadis"), sohbet: v("sohbet"), sunum: v("sunum"), questions: v("questions"),
+    tags: v("tags").split(",").map((t) => t.trim()).filter(Boolean),
+    attendees: [...f.querySelectorAll("input[name=att]:checked")].map((x) => x.value) };
+}
+let activeRec = null;
+async function startRecording(id) {
+  const keep = editorDraft();
+  let d; try { d = await loadRecap(id); } catch (e) { return toast(e.message); }
+  if (!navigator.mediaDevices?.getUserMedia) return toast("This browser can't record. Try Safari or Chrome.");
+  openSheet({
+    title: "Recording sohbet", action: null,
+    lead: `${weekLabel(S.state.weeks[id])} · keep this screen open; the phone stays awake.`,
+    body: `<div class="rec">
+      <div class="rec-dot"></div><div class="rec-time" id="rec-time">00:00</div>
+      <div class="rec-level"><span id="rec-lvl"></span></div>
+      <p class="small muted" id="rec-status">Starting microphone…</p>
+      <button type="button" class="btn filled lg block rec-stop" data-a="recStop">${ic("stop")} Stop & finish</button>
+      <div class="rec-tx" id="rec-tx"></div></div>`,
+  });
+  const pipe = new Pipeline(id, d.mediaEnabled ? d.audio.length : 0, d.transcript || "", (p) => {
+    const tx = $("#rec-tx"); if (tx) { tx.textContent = p.parts.filter(Boolean).slice(-4).join("\n"); }
+    const st = $("#rec-status"); if (st && activeRec) st.textContent = `${p.done} min transcribed${p.failed ? ` · ${p.failed} failed` : ""}`;
+  });
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC(); await ctx.resume();
+    const src = ctx.createMediaStreamSource(stream);
+    const proc = ctx.createScriptProcessor(4096, 1, 1);
+    const rec = { id, keep, stream, ctx, proc, pipe, buf: [], len: 0, rate: ctx.sampleRate, started: Date.now(), wake: null };
+    rec.flush = () => {
+      if (!rec.len) return;
+      const all = new Float32Array(rec.len); let o = 0;
+      for (const b of rec.buf) { all.set(b, o); o += b.length; }
+      rec.buf = []; rec.len = 0;
+      pipe.add(wavBlob(downsample(all, rec.rate)));
+    };
+    proc.onaudioprocess = (e) => {
+      const d0 = e.inputBuffer.getChannelData(0);
+      rec.buf.push(new Float32Array(d0)); rec.len += d0.length;
+      let peak = 0; for (let i = 0; i < d0.length; i += 16) peak = Math.max(peak, Math.abs(d0[i]));
+      const l = $("#rec-lvl"); if (l) l.style.width = Math.min(100, peak * 140) + "%";
+      if (rec.len >= rec.rate * PART_SECONDS) rec.flush();
+    };
+    src.connect(proc); proc.connect(ctx.destination);
+    rec.timer = setInterval(() => {
+      const s = Math.floor((Date.now() - rec.started) / 1000), t = $("#rec-time");
+      if (t) t.textContent = `${s >= 3600 ? Math.floor(s / 3600) + ":" : ""}${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+    }, 500);
+    try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {}
+    activeRec = rec;
+    $("#rec-status").textContent = "Recording · transcribed every minute";
+  } catch (e) {
+    closeSheet();
+    toast(e.name === "NotAllowedError" ? "Microphone permission was denied" : "Couldn't start the microphone");
+  }
+}
+async function stopRecording() {
+  const rec = activeRec; if (!rec) return closeSheet();
+  activeRec = null;
+  rec.flush(); clearInterval(rec.timer);
+  rec.proc.disconnect(); rec.stream.getTracks().forEach((t) => t.stop()); rec.ctx.close().catch(() => {}); rec.wake?.release?.().catch(() => {});
+  const st = $("#rec-status"); if (st) st.textContent = "Finishing the last parts…";
+  const b = $(".rec-stop"); if (b) { b.disabled = true; b.innerHTML = `<span class="spinner sm"></span> Transcribing…`; }
+  await rec.pipe.drain();
+  if (rec.pipe.failed) toast(`${rec.pipe.failed} part(s) couldn't be transcribed${rec.pipe.lastError ? ": " + rec.pipe.lastError : ""}`);
+  closeSheet();
+  recapSheet(rec.id, { transcript: rec.pipe.text(), keep: rec.keep });
+}
+
+async function uploadAudio(id, file) {
+  if (!file) return;
+  const keep = editorDraft();
+  let d; try { d = await loadRecap(id); } catch (e) { return toast(e.message); }
+  openSheet({
+    title: "Transcribing audio", action: null,
+    lead: `${esc(file.name)} · keep this screen open.`,
+    body: `<div class="rec"><div class="rec-level"><span id="up-bar" style="width:2%"></span></div><p class="small muted" id="up-status">Reading the file…</p><div class="rec-tx" id="rec-tx"></div></div>`,
+  });
+  const keepTx = $("#rc-tx")?.value;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    let ctx; try { ctx = new AC({ sampleRate: OUT_RATE }); } catch { ctx = new AC(); }
+    const ab = await file.arrayBuffer();
+    const audio = await new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej));
+    ctx.close?.();
+    const ch = audio.getChannelData(0), rate = audio.sampleRate, step = rate * PART_SECONDS;
+    const total = Math.ceil(ch.length / step);
+    const pipe = new Pipeline(id, d.mediaEnabled ? d.audio.length : 0, keepTx ?? d.transcript ?? "", (p) => {
+      const bar = $("#up-bar"); if (bar) bar.style.width = Math.max(2, (p.done / total) * 100) + "%";
+      const s = $("#up-status"); if (s) s.textContent = `Transcribed ${p.done} of ${total} minutes${p.failed ? ` · ${p.failed} failed` : ""}`;
+      const tx = $("#rec-tx"); if (tx) tx.textContent = p.parts.filter(Boolean).slice(-3).join("\n");
+    });
+    $("#up-status").textContent = `0 of ${total} minutes`;
+    for (let o = 0; o < ch.length; o += step) await pipe.add(wavBlob(downsample(ch.subarray(o, o + step), rate)));
+    closeSheet();
+    if (pipe.failed) toast(`${pipe.failed} part(s) couldn't be transcribed`);
+    recapSheet(id, { transcript: pipe.text(), keep });
+  } catch (e) {
+    closeSheet();
+    toast("Couldn't read that audio file. Try an .m4a or .mp3, or paste the transcript instead.");
+  }
+}
+
 /* ---------- events ---------- */
 document.addEventListener("click", async (e) => {
   const el = e.target.closest("[data-a]");
@@ -692,7 +1065,14 @@ document.addEventListener("click", async (e) => {
   const a = el.dataset.a;
   const w = S && sel ? W() : null;
   switch (a) {
-    case "close": closeSheet(); break;
+    case "close":
+      if (activeRec) { if (confirm("Stop recording?")) stopRecording(); break; }
+      closeSheet(); break;
+    case "detail": openDetail(el.dataset.week); break;
+    case "recap": recapSheet(el.dataset.week || sel); break;
+    case "record": startRecording(el.dataset.week || sel); break;
+    case "recStop": stopRecording(); break;
+    case "summarize": summarizeInto(el.dataset.week, el); break;
     case "iam": me = el.dataset.id; store.set("sohbet.me", me); render(); toast(`Selam, ${nameOf(me)}!`); break;
     case "join":
       try {
@@ -711,6 +1091,7 @@ document.addEventListener("click", async (e) => {
     case "unpresent":
       if (confirm("Remove this from past topics? Use this if you didn't actually present that week.")) {
         await act("releaseKonu", { weekId: el.dataset.week }).catch(() => {});
+        closeSheet();
         toast("Removed — you can take an upcoming week again");
       }
       break;
@@ -729,6 +1110,19 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "rota": rotaSheet(); break;
+    case "hostYes": {
+      const wk = el.closest(".hero") ? curWeek() : w;
+      confirmHostSheet(wk);
+      break;
+    }
+    case "hostSkip": {
+      const wk = el.closest(".hero") ? curWeek() : w;
+      if (confirm("Skip hosting this week? The next person in the yemek sırası will be asked.")) {
+        await act("skipHost", { weekId: wk.id }).catch(() => {});
+        toast("Okay — asking the next person");
+      }
+      break;
+    }
     case "rotaEdit": rotaEditSheet(); break;
     case "cancel":
       if (confirm(w.cancelled ? "Bring this week back?" : "Mark this week as no sohbet?")) act("setCancelled", { cancelled: !w.cancelled }).catch(() => {});
@@ -750,6 +1144,7 @@ document.addEventListener("click", async (e) => {
 document.addEventListener("change", async (e) => {
   const el = e.target.closest("[data-change]");
   if (!el) return;
+  if (el.dataset.change === "upload") { uploadAudio(el.dataset.week, el.files?.[0]); return; }
   if (el.dataset.change === "role") {
     await act("setRoles", { [el.dataset.role]: el.value || null }).catch(() => {});
     toast("Saved");
@@ -784,7 +1179,7 @@ function shareWeek() {
   const lines = [`*Thursday Bros · ${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}*`];
   if (w.cancelled) lines.push("No sohbet this week.");
   else {
-    lines.push(`🏠 ${h ? nameOf(h.id) + " hosting" : "Host?"} · 🕖 ${fmtTime(weekTime(w))}${place ? "\n📍 " + place : ""}`);
+    lines.push(`🏠 ${h ? nameOf(h.id) + " hosting" + (h.confirmed ? "" : " (to confirm)") : "Host?"} · 🕖 ${fmtTime(weekTime(w))}${place ? "\n📍 " + place + "\n" + gmaps(place) : ""}`);
     lines.push(`📖 Hadis: ${w.hadis ? (w.hadis.source || "posted") : "—"}`);
     lines.push(`💬 Sohbet: ${w.sohbet?.title || "—"}`);
     lines.push(`🎤 Sunum: ${w.konu ? `${w.konu.title} (${nameOf(w.konu.presenterId)})` : "Open — volunteer 👇"}`);

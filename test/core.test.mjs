@@ -127,7 +127,7 @@ t("yemek sırası: order from start date, repeats, per-week change, new names be
   assert.equal(s.members.find((m) => m.id === v.rotaPreview[4].host.id).name, "Berkay", "repeats after the end");
   const harun = s.members.find((m) => m.name === "Harun").id;
   act(s, FRI, { type: "setHost", weekId: "2026-11-05", actor: harun, hostId: harun });
-  assert.deepEqual(hostFor(s, "2026-11-05"), { id: harun, changed: true });
+  assert.equal(hostFor(s, "2026-11-05").id, harun); assert.ok(hostFor(s, "2026-11-05").changed);
   act(s, FRI, { type: "setHost", weekId: "2026-11-05", actor: harun, hostId: "" });
   assert.equal(nm("2026-11-05"), "Berkay", "clearing the change follows the order again");
 });
@@ -179,6 +179,38 @@ t("presenter can remove a past entry they didn't actually give", () => {
   assert.ok(cooldownLeft(s, ids[0]) > 0);
   act(s, FRI, { type: "releaseKonu", weekId: "2026-10-22", actor: ids[0] });
   assert.equal(cooldownLeft(s, ids[0]), 0);
+});
+
+t("hosting: rota host confirms with address + notes, or skips and the next in order is asked", () => {
+  const s = emptyState();
+  applyAction(s, { type: "init", tz: TZ }, FRI);
+  advance(s, FRI);
+  const id = (n) => s.members.find((m) => m.name === n).id;
+  assert.deepEqual(hostFor(s, WEEK), { id: id("Berkay"), changed: false, confirmed: false, skipped: [] });
+  assert.throws(() => act(s, FRI, { type: "confirmHost", weekId: WEEK, actor: id("Harun") }), /Berkay is the host/);
+  act(s, FRI, { type: "skipHost", weekId: WEEK, actor: id("Berkay") });
+  assert.equal(hostFor(s, WEEK).id, id("Harun"), "next in order is asked");
+  act(s, FRI, { type: "skipHost", weekId: WEEK, actor: id("Harun") });
+  assert.equal(hostFor(s, WEEK).id, id("Ahmet"));
+  act(s, FRI, { type: "confirmHost", weekId: WEEK, actor: id("Ahmet"), place: "12 Oak St, Sterling VA", hostNotes: "Gate 1234", saveAddress: true });
+  const h = hostFor(s, WEEK);
+  assert.equal(h.id, id("Ahmet")); assert.ok(h.confirmed); assert.ok(h.changed);
+  assert.equal(s.weeks[WEEK].hostNotes, "Gate 1234");
+  assert.equal(s.members.find((m) => m.name === "Ahmet").address, "12 Oak St, Sterling VA");
+  assert.equal(hostFor(s, "2026-11-12").id, id("Harun"), "the order itself is unchanged");
+});
+
+t("everyone skips → anyone can offer to host", () => {
+  const s = emptyState(); s.settings.rotaSeeded = s.settings.rolesSeeded = s.settings.prelaunchCleaned = true;
+  applyAction(s, { type: "init", tz: TZ }, FRI);
+  const a = applyAction(s, { type: "addMember", name: "A" }, FRI).id, b = applyAction(s, { type: "addMember", name: "B" }, FRI).id;
+  const c = applyAction(s, { type: "addMember", name: "C" }, FRI).id;
+  act(s, FRI, { type: "setRota", actor: a, names: ["A", "B"], start: WEEK });
+  act(s, FRI, { type: "skipHost", weekId: WEEK, actor: a });
+  act(s, FRI, { type: "skipHost", weekId: WEEK, actor: b });
+  assert.equal(hostFor(s, WEEK), null);
+  act(s, FRI, { type: "confirmHost", weekId: WEEK, actor: c, place: "C's" });
+  assert.equal(hostFor(s, WEEK).id, c);
 });
 
 t("geliyorum / gelemiyorum", () => {
