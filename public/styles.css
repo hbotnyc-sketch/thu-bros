@@ -441,7 +441,7 @@ label.check input { width: 18px; height: 18px; accent-color: var(--primary); }
 .welcome-q::after { content: "”"; margin-left: 2px; }
 .welcome-src { margin: 14px 0 20px; font-size: 13px; color: var(--on-surface-var); }
 .welcome-timer { height: 3px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
-.welcome-timer span { display: block; height: 100%; width: 100%; background: var(--primary); transform-origin: left; animation: tbtimer 2.25s linear forwards; }
+.welcome-timer span { display: block; height: 100%; width: 100%; background: var(--primary); transform-origin: left; animation: tbtimer 2.5s linear forwards; }
 @keyframes tbtimer { to { transform: scaleX(0); } }
 .welcome-hint { margin-top: 10px; font-size: 12px; color: var(--on-surface-var); }
 @media (max-width: 360px) { .welcome-q { font-size: 19px; } }
@@ -555,3 +555,18 @@ button.avatar { position: relative; }
 .steps li:first-child { border-top: 0; }
 .steps li::before { content: counter(st); position: absolute; left: 0; top: 9px; width: 30px; height: 30px; border-radius: 50%; background: var(--primary-container); color: var(--on-primary-container); display: grid; place-items: center; font-weight: 600; font-size: 14px; }
 .ic.inl { width: 18px; height: 18px; vertical-align: -3px; color: var(--primary); }
+
+/* stats */
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.kpis > div { background: var(--surface-1); border-radius: 14px; padding: 12px 8px; text-align: center; }
+.kpis b { display: block; font-size: 24px; font-weight: 600; letter-spacing: -0.5px; }
+.kpis b small { font-size: 14px; font-weight: 500; color: var(--on-surface-var); }
+.kpis span { font-size: 11.5px; color: var(--on-surface-var); }
+@media (max-width: 380px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+.bars { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; align-items: end; height: 130px; padding: 4px 0; }
+.bar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.bar i { display: block; width: 100%; max-width: 22px; background: var(--primary); border-radius: 4px 4px 0 0; min-height: 2px; }
+.bar .n { font-size: 10.5px; color: var(--on-surface-var); margin-bottom: 2px; }
+.bar .d { font-size: 10.5px; color: var(--on-surface-var); margin-top: 4px; }
+.stat-list li { padding: 8px 0; }
+.ok-dot .ic { width: 18px; height: 18px; color: var(--primary); }

@@ -232,6 +232,7 @@ const roleId = (r) => { const id = S.state.settings.roles?.[r]; return id && mem
 const feedbackUnread = () => roleId("feedback") === me
   ? (S.state.feedback || []).filter((f) => f.by !== me && f.at > (S.state.settings.feedbackSeenAt || 0)).length : 0;
 const canEdit = (r) => !roleId(r) || roleId(r) === me;
+const localToday = () => new Date().toLocaleDateString("en-CA", { timeZone: S.state.settings.tz || undefined });
 const shortDate = (id) => fmtDate(id, { weekday: "short", month: "short", day: "numeric" });
 /** Upcoming week this member is presenting (if any) */
 const upcomingTalk = (id) => Object.values(S.state.weeks)
@@ -768,6 +769,7 @@ async function profileSheet(focusWeek) {
     <div class="prof">${avatar(me, "lg")}<div><div class="who" style="font-size:18px;font-weight:500">${esc(m.name)}</div>
       <div class="small muted">${m.phone ? esc(m.phone) : "No WhatsApp number"}${m.address ? " · " + esc(m.address) : ""}</div></div></div>
 
+    ${roleId("feedback") === me ? `<button type="button" class="btn filled block" data-a="stats" style="margin:6px 0 8px">📊 Site stats · who joined</button>` : ""}
     ${roleId("feedback") === me ? `<button type="button" class="btn ${feedbackUnread() ? "filled" : "tonal"} block" data-a="feedback" style="margin:6px 0 4px">${ic("chat")} Feedback${feedbackUnread() ? ` · ${feedbackUnread()} new` : ""}</button>` : ""}
     <div class="section-lbl">${ic("lock")} My notes <span class="muted" style="font-weight:400">· only you can see these</span></div>
     ${noteBox(wk, true)}
@@ -1021,7 +1023,8 @@ function recapSheet(id, preset = {}) {
     const w = S.state.weeks[id];
     const r = { ...(d.recap || {}), ...(preset.keep || {}), ...(preset.draft || {}) };
     const transcript = preset.transcript ?? d.transcript ?? "";
-    const going = Object.entries(w.rsvp || {}).filter(([, v]) => v === "yes").map(([k]) => k);
+    const happened = w.id <= localToday();
+    const going = happened ? Object.entries(w.rsvp || {}).filter(([, v]) => v === "yes").map(([k]) => k) : [];
     const att = new Set(r.attendees?.length ? r.attendees : going);
     const sorted = [...members()].sort((a, b) => a.name.localeCompare(b.name));
     openSheet({
@@ -1050,7 +1053,7 @@ function recapSheet(id, preset = {}) {
       <label class="field"><span>Sunum</span><textarea name="sunum" rows="3" placeholder="• Takeaways">${esc(r.sunum)}</textarea></label>
       <label class="field"><span>Questions</span><textarea name="questions" rows="3" placeholder="• Questions raised or left open">${esc(r.questions)}</textarea></label>
       <label class="field"><span>Tags <i>comma separated</i></span><input type="text" name="tags" value="${esc((r.tags || []).join(", "))}" placeholder="tevekkül, Haşr 22, el-Kuddûs" /></label>
-      <div class="field"><span>Who came</span><div class="seg att">${sorted.map((m) => `<label><input type="checkbox" name="att" value="${m.id}" ${att.has(m.id) ? "checked" : ""}/><span>${esc(m.name)}</span></label>`).join("")}</div></div>`,
+      <div class="field"><span>Who came ${happened ? "" : `<i>fill in after the sohbet</i>`}</span><div class="seg att">${sorted.map((m) => `<label><input type="checkbox" name="att" value="${m.id}" ${att.has(m.id) ? "checked" : ""}/><span>${esc(m.name)}</span></label>`).join("")}</div></div>`,
     }, async (f) => {
       const body = {
         actor: me, title: f.title, summary: f.summary, hadis: f.hadis, sohbet: f.sohbet, sunum: f.sunum, questions: f.questions,
@@ -1268,6 +1271,55 @@ async function uploadAudio(id, file) {
     closeSheet();
     toast("Couldn't read that audio file. Try an .m4a or .mp3, or paste the transcript instead.");
   }
+}
+
+/* ---------- visit tracking (anonymous id until a name is picked) ---------- */
+function visitorId() {
+  try {
+    let v = localStorage.getItem("tb.vid");
+    if (!v) { v = (crypto.randomUUID?.() || String(Math.random())).replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 24); localStorage.setItem("tb.vid", v); }
+    return v;
+  } catch { return "anon" + Math.random().toString(36).slice(2, 10); }
+}
+function trackVisit() {
+  try { if (sessionStorage.getItem("tb.visit") === (me || "-")) return; sessionStorage.setItem("tb.visit", me || "-"); } catch {}
+  fetch(`/api/visit?vid=${visitorId()}&actor=${me || ""}`, { method: "POST" }).catch(() => {});
+}
+
+/* ---------- site stats (admin) ---------- */
+async function statsSheet() {
+  let d; try { d = await apiX(`/api/stats?actor=${me}`); } catch (e) { return toast(e.message); }
+  const byDay = Object.fromEntries(d.days.map((x) => [x.day, x]));
+  const days = []; for (let i = 13; i >= 0; i--) { const t = new Date(d.today + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() - i); days.push(t.toISOString().slice(0, 10)); }
+  const max = Math.max(1, ...d.days.map((x) => x.people));
+  const today = byDay[d.today] || { people: 0, opens: 0, named: 0 };
+  const joined = d.members.filter((m) => m.active).sort((a, b) => (b.last_at || 0) - (a.last_at || 0));
+  const notYet = d.members.filter((m) => !m.active).sort((a, b) => a.name.localeCompare(b.name));
+  const invite = (m) => waLink(m.phone, `Selam ${m.name}! Our Thursday Bros page is up: hadis, sohbet, sunum, host & chat in one place. Open it and pick your name 👉 ${location.origin}`);
+  openSheet({
+    title: "Site stats", action: null,
+    lead: `Only you can see this. Tracking since ${esc(fmtDate(d.trackingSince, { month: "short", day: "numeric" }))}.`,
+    body: `
+    <div class="kpis">
+      <div><b>${today.people}</b><span>people today</span></div>
+      <div><b>${today.opens}</b><span>opens today</span></div>
+      <div><b>${joined.length}<small>/${d.members.length}</small></b><span>members joined</span></div>
+      <div><b>${d.totals.visitors}</b><span>devices total</span></div>
+    </div>
+    ${d.anonToday ? `<p class="small muted" style="margin:-4px 0 12px">${d.anonToday} visitor${d.anonToday > 1 ? "s" : ""} today opened the site but haven't picked a name yet.</p>` : ""}
+    <div class="section-lbl">People per day · last 14 days</div>
+    <div class="bars">${days.map((id) => { const x = byDay[id]; const n = x?.people || 0;
+      return `<div class="bar" title="${id}: ${n} people, ${x?.opens || 0} opens"><span class="n">${n || ""}</span><i style="height:${(n / max) * 100}%"></i><span class="d">${new Date(id + "T12:00:00Z").toLocaleDateString("en-US", { timeZone: "UTC", weekday: "narrow" })}</span></div>`; }).join("")}</div>
+
+    <div class="section-lbl">Joined · ${joined.length}</div>
+    <ul class="list stat-list">${joined.map((m) => `<li>${avatar(m.id, "sm")}<div class="grow">${esc(m.name)}
+      <div class="small muted">${m.last_at ? `last on ${ago(m.last_at)} · ${m.opens} open${m.opens > 1 ? "s" : ""}${m.device ? " · " + esc(m.device) : ""}` : "active before tracking started"}</div></div>
+      <span class="ok-dot">${ic("check")}</span></li>`).join("") || `<li class="muted small">No one yet.</li>`}</ul>
+
+    <div class="section-lbl">Not joined yet · ${notYet.length}</div>
+    <ul class="list stat-list">${notYet.map((m) => `<li>${avatar(m.id, "sm")}<div class="grow">${esc(m.name)}${m.phone ? "" : ` <span class="small muted">· no number</span>`}</div>
+      <a class="btn text small" href="${invite(m)}" target="_blank" rel="noopener">${ic("chat")} Invite</a></li>`).join("") || `<li class="muted small">Everyone's in 🎉</li>`}</ul>`,
+  });
 }
 
 /* ---------- add to home screen ---------- */
@@ -1489,16 +1541,17 @@ document.addEventListener("click", async (e) => {
     case "record": startRecording(el.dataset.week || sel); break;
     case "recStop": stopRecording(); break;
     case "summarize": summarizeInto(el.dataset.week, el); break;
-    case "iam": me = el.dataset.id; store.set("sohbet.me", me); render(); toast(`Selam, ${nameOf(me)}!`); showWelcomeHadith(); break;
+    case "iam": me = el.dataset.id; store.set("sohbet.me", me); render(); toast(`Selam, ${nameOf(me)}!`); showWelcomeHadith(); trackVisit(); break;
     case "join":
       try {
         const r = await api({ type: "addMember", name: el.dataset.name });
         me = r.id; store.set("sohbet.me", me); render();
-        toast(`Hoş geldin, ${el.dataset.name}!`); showWelcomeHadith();
+        toast(`Hoş geldin, ${el.dataset.name}!`); showWelcomeHadith(); trackVisit();
       } catch (err) { toast(err.message); }
       break;
     case "profile": profileSheet(el.dataset.week); break;
     case "notifs": notifsSheet(); break;
+    case "stats": statsSheet(); break;
     case "installHow": if (installEvt) { installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; render(); }); } else installSheet(); break;
     case "installNow": closeSheet(); installEvt?.prompt(); installEvt?.userChoice.finally(() => { installEvt = null; render(); }); break;
     case "installHide": try { localStorage.setItem("tb.installDismissed", "1"); } catch {} render(); toast("You can find it anytime in your Profile"); break;
@@ -1686,7 +1739,7 @@ function showWelcomeHadith() {
   let done = false;
   const close = () => { if (done) return; done = true; el.classList.add("out"); setTimeout(() => el.remove(), 300); };
   el.addEventListener("click", close);
-  setTimeout(close, 2250);
+  setTimeout(close, 2500);
   document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", k); } });
   document.body.appendChild(el);
 }
@@ -1697,6 +1750,7 @@ function showWelcomeHadith() {
     await api();
     if (!S.state.settings.tz) await api({ type: "init", tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
     render();
+    trackVisit();
     if (me && member(me)) { showWelcomeHadith(); refreshChatSummary(); } // only once someone has picked their name
   } catch (e) { showError(e.message); }
   setInterval(() => { if (!$("#sheet-root").innerHTML && document.visibilityState === "visible") refresh(); }, 30000);
