@@ -1,4 +1,5 @@
 // Thursday Bros — single-page client. No framework: state → render() → event delegation.
+import { HADITHS } from "./hadiths.js";
 
 /* ---------- tiny helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -326,7 +327,7 @@ function renderWeekHead(w) {
       <h1>${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}</h1>
       <div class="meta">
         <span>${ic("clock")}${esc(fmtTime(weekTime(w)))}</span>
-        ${place ? `<span>${ic("pin")}${esc(place)}</span>` : ""}
+        ${place ? `<a class="meta-link" href="${gmaps(place)}" target="_blank" rel="noopener">${ic("pin")}${esc(place)}</a>` : ""}
       </div></div>
     <button class="btn text small" data-a="cancel">${w.cancelled ? "Restore week" : "Cancel week"}</button>
   </div>`;
@@ -463,6 +464,7 @@ function renderHost(w) {
         ? `<p class="empty">No host yet — everyone in the order passed.</p><button class="btn tonal" data-a="hostYes" style="margin-bottom:12px">${ic("home")} I can host</button>`
         : `<p class="empty">No host yet. Set up the yemek sırası once and it fills every week.</p>
            <button class="btn tonal" data-a="rotaEdit" style="margin-bottom:12px">${ic("plus")} Set yemek sırası</button>`}
+    ${h && !w.cancelled ? `<div class="addr">${ic("clock")}<div><div class="addr-t">${esc(fmtDate(w.id, { weekday: "long" }))}, ${esc(fmtTime(weekTime(w)))}</div></div></div>` : ""}
     ${place ? `<div class="addr">${ic("pin")}<div style="flex:1;min-width:0"><div class="addr-t">${esc(place)}</div>
         <div class="row" style="margin-top:8px"><a class="btn outlined small" href="${gmaps(place)}" target="_blank" rel="noopener">Google Maps</a><a class="btn outlined small" href="${amaps(place)}" target="_blank" rel="noopener">Apple Maps</a></div></div></div>` : ""}
     ${w.hostNotes ? `<div class="notes-box" style="margin-top:0;margin-bottom:12px"><div class="lbl">Notes from host</div><div class="notes">${esc(w.hostNotes)}</div></div>` : ""}
@@ -630,7 +632,9 @@ function confirmHostSheet(w) {
     body: `
     <label class="field"><span>Address</span><input type="text" name="place" maxlength="200" value="${esc(w.place || mine?.address || "")}" placeholder="Street, city" autocomplete="street-address" />
       <label class="check"><input type="checkbox" name="saveAddress" value="1" checked /> Remember as my home address</label></label>
-    <label class="field"><span>Time</span><input type="time" name="time" value="${esc(weekTime(w))}" /></label>
+    <div class="field"><span>Start time</span>
+      <div class="seg" style="margin-bottom:8px">${["19:00", "19:30", "20:00"].map((t) => `<label><input type="radio" name="tq" value="${t}" ${weekTime(w) === t ? "checked" : ""} data-tq /><span>${fmtTime(t)}</span></label>`).join("")}</div>
+      <input type="time" name="time" value="${esc(weekTime(w))}" aria-label="Start time" /></div>
     <label class="field"><span>Notes for everyone <i>optional</i></span><textarea name="hostNotes" rows="4" maxlength="1000" placeholder="Gate code, where to park, which door, food plans…">${esc(w.hostNotes)}</textarea></label>`,
   }, async (f) => {
     if (!f.place?.trim()) { toast("Add the address so people can find you"); throw 0; }
@@ -1160,6 +1164,7 @@ document.addEventListener("click", async (e) => {
 });
 
 document.addEventListener("change", async (e) => {
+  if (e.target.matches?.("[data-tq]")) { const t = $("#sheet-root input[name=time]"); if (t) t.value = e.target.value; return; }
   const el = e.target.closest("[data-change]");
   if (!el) return;
   if (el.dataset.change === "upload") { uploadAudio(el.dataset.week, el.files?.[0]); return; }
@@ -1214,8 +1219,34 @@ function showError(msg) {
     <button class="btn filled" onclick="location.reload()">Try again</button></main>`;
 }
 
+/* ---------- welcome hadith (once per visit) ---------- */
+function showWelcomeHadith() {
+  try { if (sessionStorage.getItem("tb.welcomed")) return; sessionStorage.setItem("tb.welcomed", "1"); } catch {}
+  let last = -1; try { last = +(localStorage.getItem("tb.lastHadith") ?? -1); } catch {}
+  let i = Math.floor(Math.random() * HADITHS.length);
+  if (i === last) i = (i + 1) % HADITHS.length;
+  try { localStorage.setItem("tb.lastHadith", String(i)); } catch {}
+  const h = HADITHS[i];
+  const el = document.createElement("div");
+  el.className = "welcome";
+  el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Hadis");
+  el.innerHTML = `<div class="welcome-card">
+      <div class="welcome-mark">${logo()}</div>
+      <div class="welcome-lbl">Hz. Peygamber (s.a.v.) buyurdu:</div>
+      <blockquote class="welcome-q">${esc(h.t)}</blockquote>
+      <div class="welcome-src">${esc(h.s)}</div>
+      <button class="btn filled lg block" data-welcome>Bismillah</button>
+    </div>`;
+  const close = () => { el.classList.add("out"); setTimeout(() => el.remove(), 250); };
+  el.addEventListener("click", (e) => { if (e.target === el || e.target.closest("[data-welcome]")) close(); });
+  document.addEventListener("keydown", function k(e) { if (e.key === "Escape" || e.key === "Enter") { close(); document.removeEventListener("keydown", k); } });
+  document.body.appendChild(el);
+  setTimeout(() => el.querySelector("[data-welcome]")?.focus(), 50);
+}
+
 /* ---------- boot ---------- */
 (async () => {
+  showWelcomeHadith();
   try {
     await api();
     if (!S.state.settings.tz) await api({ type: "init", tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
