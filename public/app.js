@@ -140,6 +140,7 @@ function openSheet({ title, lead = "", body, action = "Save", danger = "" }, onS
     </form>`;
   document.body.classList.add("locked");
   const f = $("#sheet-root form");
+  f.querySelectorAll("input[data-addr]").forEach(addressAutocomplete);
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!sheetSubmit) return;
@@ -151,6 +152,55 @@ function openSheet({ title, lead = "", body, action = "Save", danger = "" }, onS
     } catch { if (btn) btn.disabled = false; }
   });
 }
+/* ---------- address search (free: Photon / OpenStreetMap, no key) ---------- */
+const ADDR_BIAS = { lat: 39.0, lon: -77.4 }; // Northern Virginia — results near here rank first
+function fmtAddress(p) {
+  const line1 = [p.housenumber, p.street].filter(Boolean).join(" ") || p.name || "";
+  const st = p.countrycode === "US" && US_STATES[p.state] ? US_STATES[p.state] : p.state;
+  const city = p.city || p.town || p.village || p.district || p.county || "";
+  return [line1, city, [st, p.postcode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+}
+const US_STATES = { Virginia: "VA", Maryland: "MD", "District of Columbia": "DC", "West Virginia": "WV", Pennsylvania: "PA", Delaware: "DE", "New York": "NY", "New Jersey": "NJ", "North Carolina": "NC" };
+function addressAutocomplete(input) {
+  const wrap = document.createElement("div");
+  wrap.className = "addr-ac";
+  input.parentNode.insertBefore(wrap, input); wrap.appendChild(input);
+  const list = document.createElement("ul");
+  list.className = "addr-list"; list.setAttribute("role", "listbox"); list.hidden = true;
+  wrap.appendChild(list);
+  let timer, ctrl, items = [], active = -1;
+  const hide = () => { list.hidden = true; active = -1; };
+  const pick = (i) => { if (!items[i]) return; input.value = items[i]; hide(); input.dispatchEvent(new Event("change", { bubbles: true })); };
+  const draw = () => {
+    list.innerHTML = items.map((a, i) => `<li role="option" class="${i === active ? "on" : ""}" data-i="${i}">${ic("pin")}<span>${esc(a)}</span></li>`).join("")
+      + `<li class="addr-attr">Address search © OpenStreetMap</li>`;
+    list.hidden = !items.length;
+  };
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 4) { items = []; hide(); return; }
+    timer = setTimeout(async () => {
+      ctrl?.abort(); ctrl = new AbortController();
+      try {
+        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lang=en&lat=${ADDR_BIAS.lat}&lon=${ADDR_BIAS.lon}`, { signal: ctrl.signal });
+        const j = await r.json();
+        items = [...new Set((j.features || []).map((f) => fmtAddress(f.properties || {})).filter((a) => a.length > 6))];
+        active = -1; draw();
+      } catch {}
+    }, 300);
+  });
+  input.addEventListener("keydown", (e) => {
+    if (list.hidden) return;
+    if (e.key === "ArrowDown") { active = Math.min(items.length - 1, active + 1); draw(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { active = Math.max(0, active - 1); draw(); e.preventDefault(); }
+    else if (e.key === "Enter" && active >= 0) { pick(active); e.preventDefault(); }
+    else if (e.key === "Escape") { hide(); e.stopPropagation(); }
+  });
+  list.addEventListener("pointerdown", (e) => { const li = e.target.closest("li[data-i]"); if (li) { e.preventDefault(); pick(+li.dataset.i); } });
+  input.addEventListener("blur", () => setTimeout(hide, 150));
+}
+
 function closeSheet() { $("#sheet-root").innerHTML = ""; sheetSubmit = null; document.body.classList.remove("locked"); }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !activeRec) closeSheet(); });
 
@@ -652,7 +702,7 @@ function hostSheet(w) {
       <option value="" ${!w.host ? "selected" : ""}>Follow yemek sırası${rotaId ? ` (${esc(nameOf(rotaId))})` : ""}</option>
       ${sorted.map(opt).join("")}</select>
       <div class="hint">Swapping weeks? Pick the other person here, and do the same on their week.</div></label>
-    <label class="field"><span>Address <i>blank = host's saved address</i></span><input type="text" name="place" maxlength="200" value="${esc(w.place)}" placeholder="${esc(member(hostOf(w)?.id)?.address || "Street, city")}" /></label>
+    <label class="field"><span>Address <i>blank = host's saved address</i></span><input type="text" name="place" maxlength="200" value="${esc(w.place)}" placeholder="${esc(member(hostOf(w)?.id)?.address || "Start typing an address…")}" autocomplete="off" data-addr /></label>
     <label class="field"><span>Time</span><input type="time" name="time" value="${esc(weekTime(w))}" /></label>
     <label class="field"><span>Notes <i>optional</i></span><textarea name="hostNotes" rows="3" maxlength="1000" placeholder="e.g. Parking on the street, dinner after sohbet">${esc(w.hostNotes)}</textarea></label>`,
   }, async (f) => { await act("setHost", { weekId: w.id, ...f }); toast("Saved"); });
@@ -667,7 +717,7 @@ function confirmHostSheet(w) {
     lead: `${weekLabel(w)} · everyone sees this on the site.`,
     action: updating ? "Save" : "Confirm",
     body: `
-    <label class="field"><span>Address</span><input type="text" name="place" maxlength="200" value="${esc(w.place || mine?.address || "")}" placeholder="Street, city" autocomplete="street-address" />
+    <label class="field"><span>Address</span><input type="text" name="place" maxlength="200" value="${esc(w.place || mine?.address || "")}" placeholder="Start typing your address…" autocomplete="off" data-addr />
       <label class="check"><input type="checkbox" name="saveAddress" value="1" checked /> Remember as my home address</label></label>
     <div class="field"><span>Start time</span>
       <div class="seg" style="margin-bottom:8px">${["19:00", "19:30", "20:00"].map((t) => `<label><input type="radio" name="tq" value="${t}" ${weekTime(w) === t ? "checked" : ""} data-tq /><span>${fmtTime(t)}</span></label>`).join("")}</div>
@@ -704,7 +754,7 @@ async function profileSheet(focusWeek) {
 
     <div class="section-lbl" style="margin-top:22px">My details</div>
     <label class="field"><span>WhatsApp number</span><input type="tel" id="pf-phone" value="${esc(m.phone)}" placeholder="+1 555 123 4567" /></label>
-    <label class="field"><span>Home address <i>for hosting</i></span><input type="text" id="pf-addr" value="${esc(m.address)}" placeholder="Street, city" /></label>
+    <label class="field"><span>Home address <i>for hosting</i></span><input type="text" id="pf-addr" value="${esc(m.address)}" placeholder="Start typing your address…" autocomplete="off" data-addr /></label>
     <div class="row" style="justify-content:space-between">
       <button type="button" class="btn tonal" data-a="pfSave">Save details</button>
       <button type="button" class="btn text" data-a="switch">Switch user</button>
@@ -856,7 +906,7 @@ function editMemberSheet(id) {
     <label class="field"><span>Name</span><input type="text" name="name" maxlength="40" value="${esc(m.name)}" /></label>
     <label class="field"><span>WhatsApp number</span><input type="tel" name="phone" value="${esc(m.phone)}" placeholder="+1 555 123 4567" />
       <div class="hint">Used for the one-tap nudge when the queue asks them.</div></label>
-    <label class="field"><span>Home address <i>for hosting</i></span><input type="text" name="address" maxlength="200" value="${esc(m.address)}" placeholder="Street, city" /></label>`,
+    <label class="field"><span>Home address <i>for hosting</i></span><input type="text" name="address" maxlength="200" value="${esc(m.address)}" placeholder="Start typing an address…" autocomplete="off" data-addr /></label>`,
     danger: `<button type="submit" class="btn text danger" name="_remove" value="1">${ic("trash")} Remove from group</button>`,
   }, async (f, submitter) => {
     if (submitter?.name === "_remove") {
