@@ -1605,7 +1605,7 @@ function startTour(force) {
   window.scrollTo(0, 0);
   tourEls = document.createElement("div");
   tourEls.className = "tour";
-  tourEls.innerHTML = `<div class="tour-hole"></div><div class="tour-tip" role="dialog" aria-live="polite"></div>`;
+  tourEls.innerHTML = `<div class="tour-hole"></div><div class="tour-tip" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-text" aria-live="polite"></div>`;
   document.body.appendChild(tourEls);
   tourEls.addEventListener("click", (e) => {
     const a = e.target.closest("[data-tour-a]")?.dataset.tourA;
@@ -1634,7 +1634,7 @@ function tourGo(i) {
   const t = TOUR[i], last = i === TOUR.length - 1;
   tourEls.querySelector(".tour-tip").innerHTML = `
     <div class="tour-step">${i + 1} / ${TOUR.length}</div>
-    <h3>${t.title}</h3><p>${t.text}</p>
+    <h3 id="tour-title">${t.title}</h3><p id="tour-text">${t.text}</p>
     <div class="tour-btns">
       ${last ? "" : `<button type="button" class="btn text" data-tour-a="skip">Skip</button>`}
       <span class="tour-dots">${TOUR.map((_, k) => `<i class="${k === i ? "on" : ""}"></i>`).join("")}</span>
