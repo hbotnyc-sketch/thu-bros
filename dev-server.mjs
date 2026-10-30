@@ -27,7 +27,27 @@ const KVFILE = path.resolve(".data/kv.json");
 const kvData = async () => { try { return JSON.parse(await fs.readFile(KVFILE, "utf8")); } catch { return {}; } };
 const kvSave = async (d) => { await fs.mkdir(path.dirname(KVFILE), { recursive: true }); await fs.writeFile(KVFILE, JSON.stringify(d)); };
 const media = new Map();
+// D1 stand-in on Node's built-in SQLite
+import { DatabaseSync } from "node:sqlite";
+await fs.mkdir(".data", { recursive: true });
+const sqlite = new DatabaseSync(path.resolve(".data/chat.db"));
+const toPos = (sql) => sql.replace(/\?(\d+)/g, "?$1");
+const d1 = {
+  prepare(sql) {
+    const st = { sql, args: [] };
+    const exec = () => sqlite.prepare(toPos(st.sql));
+    return Object.assign(st, {
+      bind(...a) { st.args = a; return st; },
+      async all() { return { results: exec().all(...st.args) }; },
+      async first() { return exec().get(...st.args) ?? null; },
+      async run() { const r = exec().run(...st.args); return { meta: { last_row_id: Number(r.lastInsertRowid), changes: r.changes } }; },
+    });
+  },
+  async batch(stmts) { return Promise.all(stmts.map((x) => x.run())); },
+};
+
 const devEnv = {
+  DB: d1,
   FAKE_AI: true,
   SOHBET: {
     async get(k, o) { const d = await kvData(); const v = d[k]; return v == null ? null : o?.type === "json" ? JSON.parse(v) : v; },

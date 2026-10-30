@@ -8,6 +8,8 @@
   "triggers": { "crons": ["0 * * * *"] },
   // Workers AI (free daily allowance): Whisper transcription + gpt-oss-120b summaries
   "ai": { "binding": "AI" },
+  // D1 (free): chat messages
+  "d1_databases": [{ "binding": "DB", "database_name": "thu-bros-db", "database_id": "4da7a3e5-8203-4c04-af28-9bca5452f267" }],
   // Optional later: an ANTHROPIC_API_KEY secret switches summaries to Claude;
   // R2 audio storage: "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "thu-bros-media" }]
   "workers_dev": true,

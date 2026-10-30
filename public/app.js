@@ -32,6 +32,9 @@ const ICONS = {
   food: '<path d="M3 11h18a9 9 0 0 1-18 0zM7 7c0-1.5 1-2 1-3.5M12 7c0-1.5 1-2 1-3.5M17 7c0-1.5 1-2 1-3.5"/>',
   trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
   ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>',
+  back: '<path d="m15 18-6-6 6-6"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   notes: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
   rec: '<circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/>',
@@ -110,7 +113,7 @@ async function act(type, data = {}) {
 }
 async function refresh() {
   if (document.querySelector("details.private[open]")) return; // don't wipe private notes being written
-  try { await api(); render(); } catch (e) { if (!S) showError(e.message); }
+  try { await api(); render(); refreshChatSummary(); } catch (e) { if (!S) showError(e.message); }
 }
 
 /* ---------- toast & sheet ---------- */
@@ -126,14 +129,14 @@ function toast(msg) {
 let sheetSubmit = null;
 /** Full-screen dialog on phones, centered card on desktop. The primary action lives in the
  *  sticky top bar so floating badges, browser toolbars and the keyboard can never cover it. */
-function openSheet({ title, lead = "", body, action = "Save", danger = "" }, onSubmit) {
+function openSheet({ title, lead = "", body, action = "Save", danger = "", back = "", cls = "", side = "" }, onSubmit) {
   sheetSubmit = onSubmit;
   $("#sheet-root").innerHTML = `<div class="scrim" data-a="close"></div>
-    <form class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}" novalidate>
+    <form class="sheet ${cls}" role="dialog" aria-modal="true" aria-label="${esc(title)}" novalidate>
       <div class="sheet-bar">
-        <button type="button" class="icon-btn" data-a="close" aria-label="Close">${ic("x")}</button>
-        <h2>${esc(title)}</h2>
-        ${action ? `<button type="submit" class="btn filled" data-primary>${action}</button>` : `<button type="button" class="btn text" data-a="close">Done</button>`}
+        ${back ? `<button type="button" class="icon-btn" data-a="${back}" aria-label="Back">${ic("back")}</button>` : `<button type="button" class="icon-btn" data-a="close" aria-label="Close">${ic("x")}</button>`}
+        <h2>${title}</h2>
+        ${side || (action ? `<button type="submit" class="btn filled" data-primary>${action}</button>` : `<button type="button" class="btn text" data-a="close">Done</button>`)}
       </div>
       <div class="sheet-body">${lead ? `<p class="lead">${lead}</p>` : ""}${body}
         ${danger ? `<div class="danger-zone">${danger}</div>` : ""}</div>
@@ -201,7 +204,7 @@ function addressAutocomplete(input) {
   input.addEventListener("blur", () => setTimeout(hide, 150));
 }
 
-function closeSheet() { $("#sheet-root").innerHTML = ""; sheetSubmit = null; document.body.classList.remove("locked"); }
+function closeSheet() { stopChatPoll(); $("#sheet-root").innerHTML = ""; sheetSubmit = null; document.body.classList.remove("locked"); refreshChatSummary(); }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !activeRec) closeSheet(); });
 
 /* ---------- derived ---------- */
@@ -249,9 +252,9 @@ function render() {
   $("#app").innerHTML = `
     <header class="topbar"><div class="topbar-in">
       <div class="brand">${logo()}<span class="wordmark">Thursday Bros</span></div>
-      <button class="icon-btn" data-a="share" title="Share this week" aria-label="Share this week">${ic("share")}</button>
-      <button class="icon-btn" data-a="members" title="Members & settings" aria-label="Members and settings">${ic("users")}</button>
-      <button class="avatar" data-a="profile" title="${esc(nameOf(me))} — profile & my notes" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}${feedbackUnread() ? `<span class="badge-dot" aria-label="${feedbackUnread()} new feedback">${feedbackUnread()}</span>` : ""}</button>
+      <button class="icon-btn has-badge" data-a="chat" title="Chat" aria-label="Chat">${ic("chat")}${chatUnreadTotal() ? `<span class="badge-dot">${chatUnreadTotal()}</span>` : ""}</button>
+      <button class="icon-btn has-badge" data-a="notifs" title="Notifications" aria-label="Notifications">${ic("bell")}${notifUnread() ? `<span class="badge-dot">${notifUnread()}</span>` : ""}</button>
+      <button class="avatar" data-a="profile" title="${esc(nameOf(me))} — profile & my notes" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
     </div></header>
     <main class="wrap">
       ${renderHostPrompt()}
@@ -389,7 +392,8 @@ function renderWeekHead(w) {
         ${place ? `<a class="meta-link" href="${gmaps(place)}" target="_blank" rel="noopener">${ic("pin")}${esc(place)}</a>` : ""}`
         : `<span>${ic("clock")}Time & place once the host confirms</span>`}
       </div></div>
-    <button class="btn text small" data-a="cancel">${w.cancelled ? "Restore week" : "Cancel week"}</button>
+    <div class="wh-actions"><button class="icon-btn" data-a="share" title="Share this week" aria-label="Share this week">${ic("share")}</button>
+    <button class="btn text small" data-a="cancel">${w.cancelled ? "Restore week" : "Cancel week"}</button></div>
   </div>`;
 }
 
@@ -772,7 +776,8 @@ async function profileSheet(focusWeek) {
     <div class="row" style="justify-content:space-between">
       <button type="button" class="btn tonal" data-a="pfSave">Save details</button>
       <button type="button" class="btn text" data-a="switch">Switch user</button>
-    </div>`,
+    </div>
+    <button type="button" class="btn outlined block" data-a="members" style="margin-top:14px">${ic("users")} Members, queue & settings</button>`,
   });
 }
 const nbTimers = {};
@@ -948,7 +953,7 @@ function roleOptions(r) {
 function editMemberSheet(id) {
   const m = member(id);
   openSheet({
-    title: `Edit ${m.name}`,
+    title: `Edit ${esc(m.name)}`,
     body: `
     <label class="field"><span>Name</span><input type="text" name="name" maxlength="40" value="${esc(m.name)}" /></label>
     <label class="field"><span>WhatsApp number</span><input type="tel" name="phone" value="${esc(m.phone)}" placeholder="+1 555 123 4567" />
@@ -1261,6 +1266,157 @@ async function uploadAudio(id, file) {
   }
 }
 
+/* ---------- notifications ---------- */
+const myEvents = () => (S.state.events || []).filter((e) => (!e.to || e.to === me) && e.by !== me && (!e.by || member(e.by) || e.type === "sunumAsk"));
+const notifUnread = () => { const seen = member(me)?.notifSeenAt || 0; return myEvents().filter((e) => e.at > seen).length; };
+function notifLine(e) {
+  const who = `<b>${esc(nameOf(e.by))}</b>`, day = e.weekId ? esc(shortDate(e.weekId)) : "", t = e.text ? esc(e.text) : "";
+  switch (e.type) {
+    case "host": return [ic("home"), `${who} confirmed hosting on ${day} — time & address are up`];
+    case "hostAsk": return [ic("home"), `${who} can't host on ${day}. <b>Can you host?</b>`];
+    case "hadis": return [ic("book"), `${who} posted the hadis for ${day}${t ? ` · ${t}` : ""}`];
+    case "hadisEdit": return [ic("book"), `${who} updated the hadis for ${day}`];
+    case "sohbet": return [ic("chat"), `${who} shared the sohbet for ${day}${t ? `: ${t}` : ""}`];
+    case "sohbetEdit": return [ic("chat"), `${who} updated the sohbet notes for ${day}`];
+    case "sunum": return [ic("mic"), `${who} is giving the sunum on ${day}${t ? `: ${t}` : ""}`];
+    case "sunumNotes": return [ic("mic"), `${who} added notes to the sunum${t ? ` “${t}”` : ""}`];
+    case "sunumAsk": return [ic("mic"), `No one volunteered for ${day}. <b>Can you give the sunum?</b>`];
+    case "recap": return [ic("notes"), `${who} added notes from ${day}${t ? `: ${t}` : ""}`];
+    case "feedback": return [ic("chat"), `${who} sent feedback: “${t}”`];
+    default: return [ic("bell"), "Update"];
+  }
+}
+function notifsSheet() {
+  const seen = member(me)?.notifSeenAt || 0;
+  const list = myEvents().slice(0, 60);
+  openSheet({
+    title: "Notifications", action: null,
+    body: list.length ? `<ul class="notif-list">${list.map((e) => { const [i, txt] = notifLine(e);
+      return `<li><button type="button" class="notif ${e.at > seen ? "new" : ""}" data-a="notifGo" data-type="${e.type}" data-week="${e.weekId || ""}">
+        <span class="n-ic">${i}</span><span class="grow">${txt}<span class="small muted n-t">${ago(e.at)}</span></span></button></li>`; }).join("")}</ul>`
+      : `<p class="muted">Nothing yet. You'll see updates here when the host confirms, the hadis or sohbet is posted, someone takes the sunum, or notes are added.</p>`,
+  });
+  if (notifUnread()) act("seenNotifs").catch(() => {});
+}
+function notifGo(el) {
+  const { type, week } = el.dataset;
+  closeSheet();
+  if (type === "feedback") return feedbackSheet();
+  if (!week) return;
+  if (week < S.currentWeekId) return openDetail(week);
+  sel = week; render(); window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/* ---------- chat ---------- */
+let chat = { summary: { unread: {}, last: [] }, conv: null, lastId: 0, timer: null };
+const chatUnreadTotal = () => Object.values(chat.summary.unread || {}).reduce((a, b) => a + b, 0);
+async function refreshChatSummary() {
+  if (!me || !S) return;
+  try {
+    chat.summary = await apiX(`/api/chat/summary?actor=${me}`);
+    const b = document.querySelector('[data-a="chat"].has-badge');
+    if (b) { b.querySelector(".badge-dot")?.remove(); const n = chatUnreadTotal(); if (n) b.insertAdjacentHTML("beforeend", `<span class="badge-dot">${n}</span>`); }
+  } catch {}
+}
+function stopChatPoll() { clearInterval(chat.timer); chat.timer = null; chat.conv = null; }
+const dmWith = (id) => "dm:" + [me, id].sort().join(":");
+const otherIn = (conv) => conv.split(":").slice(1).find((x) => x !== me);
+const convName = (conv) => conv === "general" ? "Thursday Bros · General" : nameOf(otherIn(conv));
+
+async function chatList() {
+  stopChatPoll();
+  await refreshChatSummary();
+  const last = Object.fromEntries((chat.summary.last || []).map((m) => [m.conv, m]));
+  const dms = (chat.summary.last || []).filter((m) => m.conv.startsWith("dm:") && member(otherIn(m.conv))).sort((a, b) => b.id - a.id).map((m) => m.conv);
+  const row = (conv) => {
+    const l = last[conv], n = chat.summary.unread?.[conv] || 0;
+    const pic = conv === "general" ? `<span class="avatar sm grp">${logo()}</span>` : avatar(otherIn(conv), "sm");
+    return `<button type="button" class="conv" data-a="chatOpen" data-conv="${conv}">${pic}
+      <span class="grow"><span class="c-n">${esc(convName(conv))}</span>
+      <span class="small muted c-p">${l ? `${l.sender === me ? "You: " : conv === "general" ? esc(nameOf(l.sender)) + ": " : ""}${esc(l.body.slice(0, 80))}` : "Say selam 👋"}</span></span>
+      ${l ? `<span class="small muted">${ago(l.at)}</span>` : ""}${n ? `<span class="badge-dot inline">${n}</span>` : ""}</button>`;
+  };
+  openSheet({
+    title: "Chat", action: null,
+    body: `${row("general")}
+      <div class="section-lbl">Private</div>
+      ${dms.map(row).join("") || `<p class="small muted" style="margin:0 0 8px">No private chats yet.</p>`}
+      <button type="button" class="btn tonal" data-a="chatNew" style="margin-top:8px">${ic("plus")} New private message</button>`,
+  });
+}
+function chatNew() {
+  stopChatPoll();
+  const people = [...members()].filter((m) => m.id !== me).sort((a, b) => a.name.localeCompare(b.name));
+  openSheet({
+    title: "New message", action: null, back: "chat",
+    body: `<div class="picker-box">${ic("search")}<input type="search" id="dm-q" placeholder="Search people" autocomplete="off" /></div>
+      <ul class="picker-list" id="dm-list">${people.map((m) => `<li><button type="button" data-a="chatOpen" data-conv="${dmWith(m.id)}" data-n="${esc(fold(m.name))}">${avatar(m.id, "sm")}<span>${esc(m.name)}</span></button></li>`).join("")}</ul>`,
+  });
+  $("#dm-q").addEventListener("input", (e) => {
+    const t = fold(e.target.value.trim());
+    document.querySelectorAll("#dm-list button").forEach((b) => { b.parentElement.hidden = t && !b.dataset.n.includes(t); });
+  });
+}
+const fmtClock = (t) => new Date(t).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+const fmtDay = (t) => { const d = new Date(t), today = new Date(); const y = new Date(); y.setDate(today.getDate() - 1);
+  return d.toDateString() === today.toDateString() ? "Today" : d.toDateString() === y.toDateString() ? "Yesterday" : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
+function msgHtml(list, prev) {
+  let out = "";
+  list.forEach((m, i) => {
+    const p = i ? list[i - 1] : prev;
+    if (!p || fmtDay(p.at) !== fmtDay(m.at)) out += `<div class="day-sep">${fmtDay(m.at)}</div>`;
+    const mine = m.sender === me, cont = p && p.sender === m.sender && m.at - p.at < 5 * 60000 && fmtDay(p.at) === fmtDay(m.at);
+    out += `<div class="msg ${mine ? "me" : ""} ${cont ? "cont" : ""}">
+      ${!mine && chat.conv === "general" ? (cont ? `<span class="avatar sm ghost"></span>` : avatar(m.sender, "sm")) : ""}
+      <div class="bub">${!mine && chat.conv === "general" && !cont ? `<div class="m-n">${esc(nameOf(m.sender))}</div>` : ""}${esc(m.body)}<span class="m-t">${fmtClock(m.at)}</span></div></div>`;
+  });
+  return out;
+}
+async function chatOpen(conv) {
+  stopChatPoll();
+  chat.conv = conv; chat.lastId = 0; chat.msgs = [];
+  const pic = conv === "general" ? "" : avatar(otherIn(conv), "sm");
+  openSheet({
+    title: `<span class="chat-title">${pic}${esc(convName(conv))}</span>`, action: null, back: "chat", cls: "chat-sheet", side: " ",
+    body: `<div class="chat-msgs" id="chat-msgs"><p class="small muted" style="text-align:center">Loading…</p></div>
+      <div class="chat-compose"><textarea id="chat-in" rows="1" maxlength="2000" placeholder="Message${conv === "general" ? " everyone" : ""}…" enterkeyhint="send"></textarea>
+      <button type="submit" class="btn filled send" aria-label="Send">${ic("send")}</button></div>`,
+  }, async () => {
+    const ta = $("#chat-in"), body = ta.value.trim();
+    if (!body) throw 0;
+    ta.value = ""; ta.style.height = "";
+    try {
+      const { message } = await apiX(`/api/chat?conv=${conv}&actor=${me}`, { method: "POST", body });
+      appendMsgs([message]);
+    } catch (e) { ta.value = body; toast(e.message); }
+    return "keep";
+  });
+  const ta = $("#chat-in");
+  ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 120) + "px"; });
+  ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#sheet-root form").requestSubmit(); } });
+  await pollChat(true);
+  chat.timer = setInterval(() => pollChat(false), 3000);
+}
+function appendMsgs(list) {
+  list = list.filter((m) => m.id > chat.lastId);
+  if (!list.length) return;
+  const box = $("#chat-msgs"); if (!box) return;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  if (!chat.lastId) box.innerHTML = "";
+  box.insertAdjacentHTML("beforeend", msgHtml(list, chat.msgs.at(-1)));
+  chat.msgs.push(...list); chat.lastId = list.at(-1).id;
+  if (atBottom || list.some((m) => m.sender === me) || chat.msgs.length === list.length) box.scrollTop = box.scrollHeight;
+}
+async function pollChat(first) {
+  const conv = chat.conv; if (!conv) return;
+  try {
+    const { messages } = await apiX(`/api/chat?conv=${conv}&actor=${me}&after=${chat.lastId}`);
+    if (conv !== chat.conv) return;
+    if (first && !messages.length) $("#chat-msgs").innerHTML = `<p class="small muted chat-empty">${conv === "general" ? "Group chat for everyone in Thursday Bros." : `Private chat with ${esc(convName(conv))}. Only you two can see this.`}<br>Say selam 👋</p>`;
+    appendMsgs(messages);
+  } catch {}
+}
+
 /* ---------- events ---------- */
 document.addEventListener("click", async (e) => {
   const el = e.target.closest("[data-a]");
@@ -1286,6 +1442,11 @@ document.addEventListener("click", async (e) => {
       } catch (err) { toast(err.message); }
       break;
     case "profile": profileSheet(el.dataset.week); break;
+    case "notifs": notifsSheet(); break;
+    case "notifGo": notifGo(el); break;
+    case "chat": chatList(); break;
+    case "chatNew": chatNew(); break;
+    case "chatOpen": chatOpen(el.dataset.conv); break;
     case "feedback": feedbackSheet(); break;
     case "fbLike": await act("likeFeedback", { id: el.dataset.id }).catch(() => {}); feedbackSheet(); break;
     case "fbDel":
@@ -1472,7 +1633,7 @@ function showWelcomeHadith() {
     await api();
     if (!S.state.settings.tz) await api({ type: "init", tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
     render();
-    if (me && member(me)) showWelcomeHadith(); // only once someone has picked their name
+    if (me && member(me)) { showWelcomeHadith(); refreshChatSummary(); } // only once someone has picked their name
   } catch (e) { showError(e.message); }
   setInterval(() => { if (!$("#sheet-root").innerHTML && document.visibilityState === "visible") refresh(); }, 30000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !$("#sheet-root").innerHTML) refresh(); });

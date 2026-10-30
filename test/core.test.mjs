@@ -250,6 +250,23 @@ t("feedback board: post, like, delete own (owner can delete any), owner marks se
   assert.equal(s.feedback.length, 0);
 });
 
+t("notifications: host confirm, hadis, sohbet, sunum, recap for all; targeted asks only to that person", () => {
+  const s = emptyState();
+  applyAction(s, { type: "init", tz: TZ }, FRI);
+  advance(s, FRI);
+  const id = (n) => s.members.find((m) => m.name === n).id;
+  act(s, FRI, { type: "setHadis", weekId: WEEK, actor: id("Ihsan"), text: "Hadis", source: "Buhârî" });
+  act(s, FRI, { type: "setSohbet", weekId: WEEK, actor: id("Harun"), title: "Tevekkül" });
+  act(s, FRI, { type: "claimKonu", weekId: WEEK, actor: id("Enes"), title: "Huşu" });
+  act(s, FRI, { type: "skipHost", weekId: WEEK, actor: id("Berkay") });
+  act(s, FRI, { type: "confirmHost", weekId: WEEK, actor: id("Harun"), place: "x" });
+  const types = s.events.map((e) => e.type).reverse();
+  assert.deepEqual(types, ["hadis", "sohbet", "sunum", "hostAsk", "host"]);
+  assert.equal(s.events.find((e) => e.type === "hostAsk").to, id("Harun"));
+  act(s, FRI + 5, { type: "seenNotifs", actor: id("Celal") });
+  assert.equal(s.members.find((m) => m.name === "Celal").notifSeenAt, FRI + 5);
+});
+
 t("geliyorum / gelemiyorum", () => {
   const { s, ids } = group(2, FRI);
   act(s, FRI, { type: "rsvp", weekId: WEEK, actor: ids[0], answer: "yes" });
