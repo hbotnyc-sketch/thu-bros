@@ -224,6 +224,8 @@ const weekPlace = (w) => w.place || member(hostOf(w)?.id)?.address || "";
 const detailsReady = (w) => !!hostOf(w)?.confirmed;
 const rsvpOf = (w) => w.rsvp || {};
 const roleId = (r) => { const id = S.state.settings.roles?.[r]; return id && member(id) ? id : null; };
+const feedbackUnread = () => roleId("feedback") === me
+  ? (S.state.feedback || []).filter((f) => f.by !== me && f.at > (S.state.settings.feedbackSeenAt || 0)).length : 0;
 const canEdit = (r) => !roleId(r) || roleId(r) === me;
 const shortDate = (id) => fmtDate(id, { weekday: "short", month: "short", day: "numeric" });
 /** Upcoming week this member is presenting (if any) */
@@ -249,7 +251,7 @@ function render() {
       <div class="brand">${logo()}<span class="wordmark">Thursday Bros</span></div>
       <button class="icon-btn" data-a="share" title="Share this week" aria-label="Share this week">${ic("share")}</button>
       <button class="icon-btn" data-a="members" title="Members & settings" aria-label="Members and settings">${ic("users")}</button>
-      <button class="avatar" data-a="profile" title="${esc(nameOf(me))} — profile & my notes" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
+      <button class="avatar" data-a="profile" title="${esc(nameOf(me))} — profile & my notes" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}${feedbackUnread() ? `<span class="badge-dot" aria-label="${feedbackUnread()} new feedback">${feedbackUnread()}</span>` : ""}</button>
     </div></header>
     <main class="wrap">
       ${renderHostPrompt()}
@@ -263,7 +265,10 @@ function render() {
       ${renderHost(w)}
       ${w.id === S.currentWeekId && !w.cancelled ? renderRecapCard(w) : ""}
       ${renderArchive()}
-      <p class="foot-note">Selam, ${esc(nameOf(me))} · Allah kabul etsin</p>
+      <div class="foot">
+        <button class="btn outlined" data-a="feedback">${ic("chat")} Send feedback & ideas${(S.state.feedback || []).length ? ` <span class="muted small">· ${(S.state.feedback || []).length}</span>` : ""}</button>
+        <p class="foot-note">Selam, ${esc(nameOf(me))} · Allah kabul etsin</p>
+      </div>
     </main>`;
 }
 
@@ -756,6 +761,7 @@ async function profileSheet(focusWeek) {
     <div class="prof">${avatar(me, "lg")}<div><div class="who" style="font-size:18px;font-weight:500">${esc(m.name)}</div>
       <div class="small muted">${m.phone ? esc(m.phone) : "No WhatsApp number"}${m.address ? " · " + esc(m.address) : ""}</div></div></div>
 
+    ${roleId("feedback") === me ? `<button type="button" class="btn ${feedbackUnread() ? "filled" : "tonal"} block" data-a="feedback" style="margin:6px 0 4px">${ic("chat")} Feedback${feedbackUnread() ? ` · ${feedbackUnread()} new` : ""}</button>` : ""}
     <div class="section-lbl">${ic("lock")} My notes <span class="muted" style="font-weight:400">· only you can see these</span></div>
     ${noteBox(wk, true)}
     ${past.length ? `<div class="section-lbl" style="margin-top:18px">Earlier</div>${past.map((id) => noteBox(id, false)).join("")}` : ""}
@@ -784,6 +790,37 @@ document.addEventListener("input", (e) => {
   clearTimeout(nbTimers[id]);
   nbTimers[id] = setTimeout(() => saveNote(id, e.target.value), 1200);
 });
+
+const ago = (t) => {
+  const d = (now() - t) / 1000;
+  if (d < 60) return "just now"; if (d < 3600) return `${Math.floor(d / 60)}m ago`; if (d < 86400) return `${Math.floor(d / 3600)}h ago`;
+  return new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
+function feedbackSheet() {
+  const list = S.state.feedback || [];
+  const owner = roleId("feedback"), isOwner = owner === me, seen = S.state.settings.feedbackSeenAt || 0;
+  openSheet({
+    title: "Feedback & ideas",
+    action: "Post",
+    lead: `Ideas to improve the site or the sohbet? Everyone can see posts here${owner ? `; ${esc(nameOf(owner))} gets notified` : ""}.`,
+    body: `
+    <label class="field"><span>Your feedback</span><textarea name="text" rows="3" maxlength="2000" placeholder="e.g. Could we add a reminder the night before?"></textarea></label>
+    ${list.length ? `<ul class="fb-list">${list.map((f) => `<li class="${isOwner && f.by !== me && f.at > seen ? "new" : ""}">
+        ${avatar(f.by, "sm")}<div class="grow">
+          <div class="fb-h"><b>${esc(nameOf(f.by))}</b> <span class="muted small">· ${ago(f.at)}</span>${isOwner && f.by !== me && f.at > seen ? ' <span class="chip on fb-new">new</span>' : ""}</div>
+          <div class="fb-t">${esc(f.text)}</div>
+          <div class="fb-a">
+            <button type="button" class="fb-like ${f.likes.includes(me) ? "on" : ""}" data-a="fbLike" data-id="${f.id}" aria-pressed="${f.likes.includes(me)}">👍 ${f.likes.length || ""}</button>
+            ${f.by === me || isOwner ? `<button type="button" class="btn text small danger" data-a="fbDel" data-id="${f.id}">Delete</button>` : ""}
+          </div></div></li>`).join("")}</ul>` : `<p class="muted">No feedback yet — be the first!</p>`}`,
+  }, async (fm) => {
+    if (!fm.text?.trim()) { toast("Write something first"); throw 0; }
+    await act("postFeedback", { text: fm.text });
+    toast("Thanks — posted!");
+    setTimeout(feedbackSheet, 0);
+  });
+  if (isOwner && list.some((f) => f.by !== me && f.at > seen)) act("seenFeedback").then(() => {}).catch(() => {});
+}
 
 function rotaSheet() {
   const rows = S.rotaPreview.filter((x) => x.host);
@@ -887,6 +924,8 @@ function membersSheet() {
       <select data-change="role" data-role="hadis" style="width:auto;max-width:46%" aria-label="Hadis person">${roleOptions("hadis")}</select></div>
     <div class="setting"><div>Sohbet<div class="small muted">Only this person can post the sohbet</div></div>
       <select data-change="role" data-role="sohbet" style="width:auto;max-width:46%" aria-label="Sohbet person">${roleOptions("sohbet")}</select></div>
+    <div class="setting"><div>Feedback inbox<div class="small muted">Gets a badge when someone posts feedback</div></div>
+      <select data-change="role" data-role="feedback" style="width:auto;max-width:46%" aria-label="Feedback inbox">${roleOptions("feedback")}</select></div>
     <div class="setting"><div>Usual start time<div class="small muted">Each week can still be changed</div></div>
       <input type="time" value="${esc(S.state.settings.defaultTime)}" data-change="defTime" style="width:auto" aria-label="Usual start time" /></div>
     <div class="setting"><div>Yemek sırası<div class="small muted">${(S.state.settings.hostRota || []).length} people</div></div>
@@ -1247,6 +1286,11 @@ document.addEventListener("click", async (e) => {
       } catch (err) { toast(err.message); }
       break;
     case "profile": profileSheet(el.dataset.week); break;
+    case "feedback": feedbackSheet(); break;
+    case "fbLike": await act("likeFeedback", { id: el.dataset.id }).catch(() => {}); feedbackSheet(); break;
+    case "fbDel":
+      if (confirm("Delete this post?")) { await act("deleteFeedback", { id: el.dataset.id }).catch(() => {}); feedbackSheet(); }
+      break;
     case "pfSave":
       await act("updateMember", { id: me, phone: $("#pf-phone").value, address: $("#pf-addr").value }).catch(() => {});
       toast("Saved"); profileSheet();

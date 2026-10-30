@@ -479,3 +479,19 @@ label.check input { width: 18px; height: 18px; accent-color: var(--primary); }
 .addr-list li[data-i] .ic { width: 17px; height: 17px; color: var(--on-surface-var); margin-top: 1px; flex: none; }
 .addr-list li[data-i]:hover, .addr-list li.on { background: var(--surface-2); }
 .addr-attr { font-size: 11px; color: var(--on-surface-var); padding: 4px 10px 2px; text-align: right; }
+
+/* footer + feedback */
+.foot { text-align: center; margin-top: 32px; }
+.foot .foot-note { margin-top: 14px; }
+button.avatar { position: relative; }
+.badge-dot { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #e5484d; color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--surface); }
+.fb-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.fb-list li { display: flex; gap: 10px; padding: 12px 8px; border-top: 1px solid var(--outline-var); border-radius: 12px; }
+.fb-list li.new { background: var(--primary-container); border-top-color: transparent; }
+.fb-list .grow { flex: 1; min-width: 0; }
+.fb-h b { font-weight: 500; }
+.fb-new { height: 20px; font-size: 11px; padding: 0 6px; margin-left: 4px; }
+.fb-t { white-space: pre-wrap; margin: 4px 0 6px; font-size: 15px; }
+.fb-a { display: flex; align-items: center; gap: 6px; }
+.fb-like { border: 1px solid var(--outline); background: transparent; border-radius: 999px; height: 30px; padding: 0 10px; cursor: pointer; font-size: 13px; }
+.fb-like.on { background: var(--primary-container); border-color: transparent; color: var(--on-primary-container); }

@@ -8,7 +8,7 @@ const t = (name, fn) => { fn(); pass++; console.log("✓", name); };
 
 function group(n, now) {
   const s = emptyState();
-  s.settings.rotaSeeded = s.settings.rolesSeeded = s.settings.prelaunchCleaned = s.settings.resetTestHosting1 = true; // isolate scenario tests from one-time setup
+  s.settings.rotaSeeded = s.settings.rolesSeeded = s.settings.rolesSeeded2 = s.settings.prelaunchCleaned = s.settings.resetTestHosting1 = true; // isolate scenario tests from one-time setup
   applyAction(s, { type: "init", tz: TZ }, now);
   const ids = [];
   for (let i = 0; i < n; i++) ids.push(applyAction(s, { type: "addMember", name: "M" + i }, now).id);
@@ -228,6 +228,26 @@ t("one-time reset clears Berkay's test hosting for Nov 5; resetHost does it on d
   advance(s, FRI); assert.ok(hostFor(s, WEEK).confirmed, "reset only runs once");
   act(s, FRI, { type: "resetHost", weekId: WEEK, actor: b.id });
   assert.equal(hostFor(s, WEEK).confirmed, false);
+});
+
+t("feedback board: post, like, delete own (owner can delete any), owner marks seen", () => {
+  const s = emptyState();
+  applyAction(s, { type: "init", tz: TZ }, FRI);
+  const f = applyAction(s, { type: "addMember", name: "Furkan" }, FRI).id;
+  advance(s, FRI); // seeds roles incl. feedback → Furkan
+  assert.equal(s.settings.roles.feedback, f);
+  const e = s.members.find((m) => m.name === "Enes").id, c = s.members.find((m) => m.name === "Celal").id;
+  act(s, FRI, { type: "postFeedback", actor: e, text: "Dark mode is great!" });
+  const id = s.feedback[0].id;
+  act(s, FRI, { type: "likeFeedback", actor: c, id });
+  assert.deepEqual(s.feedback[0].likes, [c]);
+  assert.throws(() => act(s, FRI, { type: "deleteFeedback", actor: c, id }), /own posts/);
+  act(s, FRI + 1000, { type: "seenFeedback", actor: c });
+  assert.equal(s.settings.feedbackSeenAt, undefined, "only the inbox owner marks seen");
+  act(s, FRI + 1000, { type: "seenFeedback", actor: f });
+  assert.equal(s.settings.feedbackSeenAt, FRI + 1000);
+  act(s, FRI, { type: "deleteFeedback", actor: f, id });
+  assert.equal(s.feedback.length, 0);
 });
 
 t("geliyorum / gelemiyorum", () => {
