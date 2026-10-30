@@ -170,6 +170,8 @@ const amaps = (a) => `https://maps.apple.com/?q=${encodeURIComponent(a)}`;
 const hostOf = (w) => S.hosts?.[w.id] || null;
 const weekTime = (w) => w.customTime || S.state.settings.defaultTime;
 const weekPlace = (w) => w.place || member(hostOf(w)?.id)?.address || "";
+/** Time, address and notes are shown only once the host has confirmed them. */
+const detailsReady = (w) => !!hostOf(w)?.confirmed;
 const rsvpOf = (w) => w.rsvp || {};
 const roleId = (r) => { const id = S.state.settings.roles?.[r]; return id && member(id) ? id : null; };
 const canEdit = (r) => !roleId(r) || roleId(r) === me;
@@ -327,9 +329,10 @@ function renderWeekHead(w) {
   const place = weekPlace(w);
   return `<div class="week-head"><div style="flex:1;min-width:0">
       <h1>${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}</h1>
-      <div class="meta">
+      <div class="meta">${w.cancelled ? "" : detailsReady(w) ? `
         <span>${ic("clock")}${esc(fmtTime(weekTime(w)))}</span>
-        ${place ? `<a class="meta-link" href="${gmaps(place)}" target="_blank" rel="noopener">${ic("pin")}${esc(place)}</a>` : ""}
+        ${place ? `<a class="meta-link" href="${gmaps(place)}" target="_blank" rel="noopener">${ic("pin")}${esc(place)}</a>` : ""}`
+        : `<span>${ic("clock")}Time & place once the host confirms</span>`}
       </div></div>
     <button class="btn text small" data-a="cancel">${w.cancelled ? "Restore week" : "Cancel week"}</button>
   </div>`;
@@ -497,10 +500,10 @@ function renderHost(w) {
         ? `<p class="empty">No host yet — everyone in the order passed.</p><button class="btn tonal" data-a="hostYes" style="margin-bottom:12px">${ic("home")} I can host</button>`
         : `<p class="empty">No host yet. Set up the yemek sırası once and it fills every week.</p>
            <button class="btn tonal" data-a="rotaEdit" style="margin-bottom:12px">${ic("plus")} Set yemek sırası</button>`}
-    ${h && !w.cancelled ? `<div class="addr">${ic("clock")}<div><div class="addr-t">${esc(fmtDate(w.id, { weekday: "long" }))}, ${esc(fmtTime(weekTime(w)))}</div></div></div>` : ""}
-    ${place ? `<div class="addr">${ic("pin")}<div style="flex:1;min-width:0"><div class="addr-t">${esc(place)}</div>
+    ${h?.confirmed && !w.cancelled ? `<div class="addr">${ic("clock")}<div><div class="addr-t">${esc(fmtDate(w.id, { weekday: "long" }))}, ${esc(fmtTime(weekTime(w)))}</div></div></div>` : ""}
+    ${place && h?.confirmed ? `<div class="addr">${ic("pin")}<div style="flex:1;min-width:0"><div class="addr-t">${esc(place)}</div>
         <div class="row" style="margin-top:8px"><a class="btn outlined small" href="${gmaps(place)}" target="_blank" rel="noopener">Google Maps</a><a class="btn outlined small" href="${amaps(place)}" target="_blank" rel="noopener">Apple Maps</a></div></div></div>` : ""}
-    ${w.hostNotes ? `<div class="notes-box" style="margin-top:0;margin-bottom:12px"><div class="lbl">Notes from host</div><div class="notes">${esc(w.hostNotes)}</div></div>` : ""}
+    ${w.hostNotes && h?.confirmed ? `<div class="notes-box" style="margin-top:0;margin-bottom:12px"><div class="lbl">Notes from host</div><div class="notes">${esc(w.hostNotes)}</div></div>` : ""}
     ${w.cancelled ? "" : `<div class="rsvp">
       <div class="section-lbl" style="margin-top:4px">Geliyor musun?</div>
       <div class="seg2" role="group" aria-label="Attendance">
@@ -1261,7 +1264,9 @@ function shareWeek() {
   const lines = [`*Thursday Bros · ${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}*`];
   if (w.cancelled) lines.push("No sohbet this week.");
   else {
-    lines.push(`🏠 ${h ? nameOf(h.id) + " hosting" + (h.confirmed ? "" : " (to confirm)") : "Host?"} · 🕖 ${fmtTime(weekTime(w))}${place ? "\n📍 " + place + "\n" + gmaps(place) : ""}`);
+    lines.push(detailsReady(w)
+      ? `🏠 ${nameOf(h.id)} hosting · 🕖 ${fmtTime(weekTime(w))}${place ? "\n📍 " + place + "\n" + gmaps(place) : ""}`
+      : `🏠 ${h ? nameOf(h.id) + " hosting (to confirm time & place)" : "Host?"}`);
     lines.push(`📖 Hadis: ${w.hadis ? (w.hadis.source || "posted") : "—"}`);
     lines.push(`💬 Sohbet: ${w.sohbet?.title || "—"}`);
     lines.push(`🎤 Sunum: ${w.konu ? `${w.konu.title} (${nameOf(w.konu.presenterId)})` : "Open — volunteer 👇"}`);
