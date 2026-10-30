@@ -8,7 +8,7 @@ const t = (name, fn) => { fn(); pass++; console.log("✓", name); };
 
 function group(n, now) {
   const s = emptyState();
-  s.settings.rotaSeeded = true; // keep scenario tests independent of the initial yemek sırası
+  s.settings.rotaSeeded = s.settings.rolesSeeded = s.settings.prelaunchCleaned = true; // isolate scenario tests from one-time setup
   applyAction(s, { type: "init", tz: TZ }, now);
   const ids = [];
   for (let i = 0; i < n; i++) ids.push(applyAction(s, { type: "addMember", name: "M" + i }, now).id);
@@ -161,6 +161,24 @@ t("fixed roles: only Ihsan edits hadis, only Harun edits sohbet, only presenter 
   assert.throws(() => act(s, FRI, { type: "releaseKonu", weekId: WEEK, actor: id("Celal") }), /Only the presenter/);
   act(s, FRI, { type: "editKonu", weekId: WEEK, actor: id("Enes"), title: "Sunum 2" });
   assert.equal(s.weeks[WEEK].konu.title, "Sunum 2");
+});
+
+t("pre-launch sunum (Oct 29) is cleared once, so it doesn't count as presented", () => {
+  const s = emptyState();
+  applyAction(s, { type: "init", tz: TZ }, FRI);
+  const f = applyAction(s, { type: "addMember", name: "Furkan" }, FRI).id;
+  s.weeks["2026-10-29"] = { id: "2026-10-29", konu: { presenterId: f, title: "oops" }, ask: null, askLog: [], cancelled: false };
+  advance(s, FRI);
+  assert.equal(s.weeks["2026-10-29"].konu, null);
+  assert.equal(cooldownLeft(s, f), 0);
+});
+
+t("presenter can remove a past entry they didn't actually give", () => {
+  const { s, ids } = group(3, FRI);
+  s.weeks["2026-10-22"] = { id: "2026-10-22", konu: { presenterId: ids[0], title: "x" }, ask: null, askLog: [], cancelled: false };
+  assert.ok(cooldownLeft(s, ids[0]) > 0);
+  act(s, FRI, { type: "releaseKonu", weekId: "2026-10-22", actor: ids[0] });
+  assert.equal(cooldownLeft(s, ids[0]), 0);
 });
 
 t("geliyorum / gelemiyorum", () => {

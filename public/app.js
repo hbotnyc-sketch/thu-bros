@@ -445,7 +445,8 @@ function renderArchive() {
   if (!past.length) return "";
   return `<section class="archive"><h2>Past topics</h2><ul class="list">${past.slice(0, 30).map((w) => `
     <li><span class="date">${fmtDate(w.id, { month: "short", day: "numeric" })}</span>
-      <div class="grow"><div>${esc(w.konu.title)}</div><div class="small muted">${esc(nameOf(w.konu.presenterId))} · ${esc(typeLabel(w.konu.topicType))}</div></div></li>`).join("")}
+      <div class="grow"><div>${esc(w.konu.title)}</div><div class="small muted">${esc(nameOf(w.konu.presenterId))} · ${esc(typeLabel(w.konu.topicType))}</div></div>
+      ${w.konu.presenterId === me ? `<button class="btn text small" data-a="unpresent" data-week="${w.id}">Didn't present</button>` : ""}</li>`).join("")}
   </ul></section>`;
 }
 
@@ -707,6 +708,12 @@ document.addEventListener("click", async (e) => {
     case "more": { const k = el.dataset.k; expanded.has(k) ? expanded.delete(k) : expanded.add(k); render(); break; }
     case "claim": { const wk = S.state.weeks[el.dataset.week || sel]; topicSheet(wk); break; }
     case "editKonu": topicSheet(w, w.konu); break;
+    case "unpresent":
+      if (confirm("Remove this from past topics? Use this if you didn't actually present that week.")) {
+        await act("releaseKonu", { weekId: el.dataset.week }).catch(() => {});
+        toast("Removed — you can take an upcoming week again");
+      }
+      break;
     case "release":
       if (confirm("Give up this slot? It reopens for others.")) { await act("releaseKonu").catch(() => {}); toast("Slot reopened"); }
       break;
