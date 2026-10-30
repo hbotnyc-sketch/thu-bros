@@ -156,6 +156,10 @@ function canClaim(w) {
   if (isCur && !w.ask && now() >= S.weekMeta[w.id].cutoff) return true; // queue exhausted → anyone
   return cooldown(me) === 0;
 }
+const hostOf = (w) => S.hosts?.[w.id] || null;
+const weekTime = (w) => w.customTime || S.state.settings.defaultTime;
+const weekPlace = (w) => w.place || member(hostOf(w)?.id)?.address || "";
+const rsvpOf = (w) => w.rsvp || {};
 function waLink(phone, text) {
   const digits = String(phone || "").replace(/\D/g, "");
   return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
@@ -260,20 +264,22 @@ function renderWeekTabs() {
   return `<nav class="weeks" aria-label="Weeks">${ids.map((id) => {
     const w = S.state.weeks[id];
     const label = id === S.currentWeekId ? "This week" : fmtDate(id, { weekday: "short" });
-    const dots = w.cancelled ? `<span class="small muted">Off</span>` :
-      `<span class="dot ${w.hadis ? "full" : ""}" title="Hadis"></span><span class="dot ${w.konu ? "full" : ""}" title="Konu"></span><span class="dot ${w.host ? "full" : ""}" title="Host"></span>`;
+    const h = hostOf(w);
+    const sub = w.cancelled ? `<span class="small muted">No sohbet</span>` :
+      `<span class="dot ${w.hadis ? "full" : ""}" title="Hadis"></span><span class="dot ${w.konu ? "full" : ""}" title="Konu"></span>
+       <span class="wk-host">${h ? esc(nameOf(h.id)) : "Host?"}</span>`;
     return `<button class="wk ${id === sel ? "sel" : ""}" data-a="week" data-id="${id}">
-      <small>${label}</small><b>${fmtDate(id, { month: "short", day: "numeric" })}</b><span class="dots">${dots}</span></button>`;
+      <small>${label}</small><b>${fmtDate(id, { month: "short", day: "numeric" })}</b><span class="dots">${sub}</span></button>`;
   }).join("")}</nav>`;
 }
 
 function renderWeekHead(w) {
-  const host = w.host ? member(w.host) : null;
-  return `<div class="week-head"><div style="flex:1">
+  const place = weekPlace(w);
+  return `<div class="week-head"><div style="flex:1;min-width:0">
       <h1>${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}</h1>
       <div class="meta">
-        ${w.time ? `<span>${ic("clock")}${esc(fmtTime(w.time))}</span>` : ""}
-        ${w.place || host ? `<span>${ic("pin")}${esc(w.place || `${host.name}'s place`)}</span>` : ""}
+        <span>${ic("clock")}${esc(fmtTime(weekTime(w)))}</span>
+        ${place ? `<span>${ic("pin")}${esc(place)}</span>` : ""}
       </div></div>
     <button class="btn text small" data-a="cancel">${w.cancelled ? "Restore week" : "Cancel week"}</button>
   </div>`;
@@ -331,28 +337,34 @@ function renderKonu(w) {
 }
 
 function renderHost(w) {
-  const iVol = w.hostVolunteers.includes(me);
-  const vols = w.hostVolunteers.filter((id) => member(id));
+  const h = hostOf(w);
+  const place = weekPlace(w);
+  const r = rsvpOf(w);
+  const yes = Object.keys(r).filter((id) => r[id] === "yes" && member(id));
+  const no = Object.keys(r).filter((id) => r[id] === "no" && member(id));
+  const mine = r[me];
+  const mapsUrl = place ? `https://maps.google.com/?q=${encodeURIComponent(place)}` : "";
   return `<section class="card">
-    <div class="card-h"><span class="badge">${ic("home")}</span><h3>Host & food</h3>
-      <button class="icon-btn" data-a="host" aria-label="Edit host details">${ic("edit")}</button></div>
-    ${w.host ? `
-      <div class="person">${avatar(w.host, "lg")}<div><div class="who">${esc(nameOf(w.host))}</div><div class="sub">Hosting this week</div></div></div>
-      <div class="kv">
-        ${w.place ? `${ic("pin")}<div>${esc(w.place)}</div>` : ""}
-        ${w.time ? `${ic("clock")}<div>${esc(fmtTime(w.time))}</div>` : ""}
-        ${w.hostNotes ? `${ic("food")}<div style="white-space:pre-wrap">${esc(w.hostNotes)}</div>` : ""}
-      </div>`
-    : `<p class="empty">Who can host this week?</p>
-       <div class="row"><button class="btn ${iVol ? "tonal" : "outlined"}" data-a="hostVol">${iVol ? `${ic("check")} You can host` : `${ic("home")} I can host`}</button>
-       ${vols.length ? `<button class="btn text" data-a="host">Confirm host</button>` : ""}</div>
-       ${vols.length ? `<div class="section-lbl">Can host</div><div class="chips">${vols.map((id) => `<span class="chip">${esc(nameOf(id))}</span>`).join("")}</div>` : ""}`}
-    <div class="section-lbl">Who's bringing what</div>
-    ${w.bring.length ? `<ul class="list">${w.bring.map((b) => `<li>${avatar(b.memberId, "sm")}
-      <div class="grow"><b style="font-weight:500">${esc(b.item)}</b> <span class="muted small">· ${esc(nameOf(b.memberId))}</span></div>
-      ${b.memberId === me ? `<button class="icon-btn" data-a="unbring" data-id="${b.id}" aria-label="Remove">${ic("x")}</button>` : ""}</li>`).join("")}</ul>` : ""}
-    <form class="add-row" data-form="bring"><input type="text" name="item" placeholder="I'll bring… (çay, tatlı, pide)" maxlength="80" aria-label="What you'll bring" />
-      <button class="btn tonal" type="submit" aria-label="Add">${ic("plus")}</button></form>
+    <div class="card-h"><span class="badge">${ic("home")}</span><h3>Host & yemek</h3>
+      <button class="icon-btn" data-a="host" aria-label="Change host or details">${ic("edit")}</button></div>
+    ${h ? `<div class="person">${avatar(h.id, "lg")}<div style="flex:1;min-width:0"><div class="who">${esc(nameOf(h.id))}${h.id === me ? ' <span class="muted small">(you)</span>' : ""}</div>
+        <div class="sub">${h.changed ? "Changed for this week" : "Yemek sırası"}</div></div>
+        <button class="btn text" data-a="rota">Sıra</button></div>`
+      : `<p class="empty">No host yet. Set up the yemek sırası once and it fills every week.</p>
+         <button class="btn tonal" data-a="rotaEdit" style="margin-bottom:12px">${ic("plus")} Set yemek sırası</button>`}
+    ${place || w.hostNotes ? `<div class="kv">
+      ${place ? `${ic("pin")}<div><a href="${mapsUrl}" target="_blank" rel="noopener">${esc(place)}</a></div>` : ""}
+      ${w.hostNotes ? `${ic("food")}<div style="white-space:pre-wrap">${esc(w.hostNotes)}</div>` : ""}</div>` : ""}
+    ${w.cancelled ? "" : `<div class="rsvp">
+      <div class="section-lbl" style="margin-top:4px">Geliyor musun?</div>
+      <div class="seg2" role="group" aria-label="Attendance">
+        <button class="${mine === "yes" ? "on" : ""}" data-a="rsvp" data-v="yes" aria-pressed="${mine === "yes"}">${mine === "yes" ? ic("check") : ""}Geliyorum <b>${yes.length}</b></button>
+        <button class="${mine === "no" ? "on no" : ""}" data-a="rsvp" data-v="no" aria-pressed="${mine === "no"}">${mine === "no" ? ic("check") : ""}Gelemiyorum <b>${no.length}</b></button>
+      </div>
+      ${yes.length ? `<div class="faces">${yes.slice(0, 14).map((id) => `<span title="${esc(nameOf(id))}">${avatar(id, "sm")}</span>`).join("")}
+        <span class="small muted">${esc(yes.slice(0, 3).map(nameOf).join(", "))}${yes.length > 3 ? ` +${yes.length - 3}` : ""}</span></div>` : ""}
+      ${no.length ? `<div class="small muted" style="margin-top:6px">Gelemiyor: ${esc(no.map(nameOf).join(", "))}</div>` : ""}
+    </div>`}
   </section>`;
 }
 
@@ -425,21 +437,77 @@ function hadisSheet(w) {
 }
 
 function hostSheet(w) {
-  const vols = w.hostVolunteers.filter((id) => member(id));
-  const others = members().filter((m) => !vols.includes(m.id));
-  const opt = (id) => `<option value="${id}" ${w.host === id ? "selected" : ""}>${esc(nameOf(id))}</option>`;
+  const def = S.rotaPreview.find((x) => x.weekId === w.id)?.host?.id || null;
+  const rotaId = (() => { const h = hostOf(w); return h && !h.changed ? h.id : (w.host ? null : def); })();
+  const opt = (m) => `<option value="${m.id}" ${w.host === m.id ? "selected" : ""}>${esc(m.name)}</option>`;
+  const sorted = [...members()].sort((a, b) => a.name.localeCompare(b.name));
   openSheet({
     title: "Host & details",
-    lead: weekLabel(w),
+    lead: `${weekLabel(w)} · changes here only affect this week.`,
     body: `
     <label class="field"><span>Host</span><select name="hostId">
-      <option value="">Not decided yet</option>
-      ${vols.length ? `<optgroup label="Can host">${vols.map(opt).join("")}</optgroup>` : ""}
-      <optgroup label="Everyone">${others.map((m) => opt(m.id)).join("")}</optgroup></select></label>
-    <label class="field"><span>Place / address</span><input type="text" name="place" maxlength="200" value="${esc(w.place)}" placeholder="Address or 'Ahmet's place'" /></label>
-    <label class="field"><span>Time</span><input type="time" name="time" value="${esc(w.time)}" /></label>
-    <label class="field"><span>Food & notes</span><textarea name="hostNotes" rows="3" maxlength="1000" placeholder="e.g. Dinner after sohbet, parking on the street">${esc(w.hostNotes)}</textarea></label>`,
+      <option value="" ${!w.host ? "selected" : ""}>Follow yemek sırası${rotaId ? ` (${esc(nameOf(rotaId))})` : ""}</option>
+      ${sorted.map(opt).join("")}</select>
+      <div class="hint">Swapping weeks? Pick the other person here, and do the same on their week.</div></label>
+    <label class="field"><span>Address <i>blank = host's saved address</i></span><input type="text" name="place" maxlength="200" value="${esc(w.place)}" placeholder="${esc(member(hostOf(w)?.id)?.address || "Street, city")}" /></label>
+    <label class="field"><span>Time</span><input type="time" name="time" value="${esc(weekTime(w))}" /></label>
+    <label class="field"><span>Notes <i>optional</i></span><textarea name="hostNotes" rows="3" maxlength="1000" placeholder="e.g. Parking on the street, dinner after sohbet">${esc(w.hostNotes)}</textarea></label>`,
   }, async (f) => { await act("setHost", { weekId: w.id, ...f }); toast("Saved"); });
+}
+
+function rotaSheet() {
+  const rows = S.rotaPreview.filter((x) => x.host);
+  openSheet({
+    title: "Yemek sırası",
+    action: null,
+    lead: "The order repeats after the last person. Changes for a single week show as swapped.",
+    body: rows.length ? `<ul class="list">${rows.map(({ weekId, host }) => {
+      const w = S.state.weeks[weekId];
+      return `<li class="${weekId === S.currentWeekId ? "now" : ""}"><span class="date">${fmtDate(weekId, { month: "short", day: "numeric" })}</span>
+        ${avatar(host.id, "sm")}<div class="grow">${esc(nameOf(host.id))}${host.id === me ? ' <span class="muted small">(you)</span>' : ""}
+        ${w?.cancelled ? ' <span class="chip">No sohbet</span>' : host.changed ? ' <span class="chip">swapped</span>' : ""}</div></li>`;
+    }).join("")}</ul>
+    <button type="button" class="btn outlined" data-a="rotaEdit" style="margin-top:16px">${ic("edit")} Edit order</button>`
+    : `<p class="empty">No order yet.</p><button type="button" class="btn tonal" data-a="rotaEdit">${ic("plus")} Set yemek sırası</button>`,
+  });
+}
+
+function rotaEditSheet() {
+  const st = S.state.settings;
+  const names = (st.hostRota || []).filter((id) => member(id)).map(nameOf).join("\n");
+  openSheet({
+    title: "Edit yemek sırası",
+    lead: "One name per line, in order. You can paste the list from WhatsApp — dates are removed automatically. New names are added to the group.",
+    body: `
+    <label class="field"><span>Order</span><textarea name="names" rows="12" placeholder="Berkay     Nov 5, 26&#10;Harun      Nov 12, 26&#10;Ahmet      Nov 19, 26">${esc(names)}</textarea></label>
+    <label class="field"><span>First person hosts on</span><input type="date" name="start" value="${esc(st.rotaStart || S.currentWeekId)}" />
+      <div class="hint">If you paste a list with dates, the first date is used.</div></label>`,
+  }, async (f) => {
+    const lines = String(f.names || "").split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    const dateRe = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(,?\s*'?\d{2,4})?|\d{1,2}[./-]\d{1,2}([./-]\d{2,4})?|\d{4}-\d{2}-\d{2}/i;
+    let start = f.start;
+    const first = lines.find((l) => dateRe.test(l));
+    if (first) { const d = parseLooseDate(first.match(dateRe)[0]); if (d) start = d; }
+    const names = lines.map((l) => l.replace(dateRe, "").replace(/^(yemek s[ıi]ram[ıi]z|s[ıi]ra)\s*:?$/i, "").replace(/^[\d.)\-\s]+/, "").trim()).filter(Boolean);
+    if (!names.length) { toast("Add at least one name"); throw 0; }
+    const r = await act("setRota", { names, start });
+    toast(r?.created ? `Saved · ${r.created} new ${r.created === 1 ? "person" : "people"} added` : "Saved");
+    setTimeout(rotaSheet, 0);
+  });
+}
+function parseLooseDate(t) {
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return t;
+  const mo = "jan feb mar apr may jun jul aug sep oct nov dec".split(" ");
+  const m1 = t.match(/^([a-z]{3})[a-z]*\.?\s+(\d{1,2})(?:,?\s*'?(\d{2,4}))?/i);
+  const m2 = t.match(/^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?/);
+  let y, m, d;
+  if (m1) { m = mo.indexOf(m1[1].toLowerCase()) + 1; d = +m1[2]; y = m1[3]; }
+  else if (m2) { m = +m2[1]; d = +m2[2]; y = m2[3]; } // US style M/D
+  else return null;
+  y = y ? (+y < 100 ? 2000 + +y : +y) : new Date().getFullYear();
+  if (!m || !d) return null;
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 function membersSheet() {
@@ -467,6 +535,10 @@ function membersSheet() {
     <div class="section-lbl">Settings</div>
     <div class="setting"><div>Break after presenting<div class="small muted">Prompt hides until this many others present (now ${S.effectiveCooldown} for this group size)</div></div>
       <div class="stepper"><button type="button" data-a="cd" data-d="-1" aria-label="Less">−</button><b>${cd}</b><button type="button" data-a="cd" data-d="1" aria-label="More">+</button></div></div>
+    <div class="setting"><div>Usual start time<div class="small muted">Each week can still be changed</div></div>
+      <input type="time" value="${esc(S.state.settings.defaultTime)}" data-change="defTime" style="width:auto" aria-label="Usual start time" /></div>
+    <div class="setting"><div>Yemek sırası<div class="small muted">${(S.state.settings.hostRota || []).length} people</div></div>
+      <button type="button" class="btn outlined" data-a="rotaEdit">${ic("edit")} Edit</button></div>
     <p class="small muted">Thursdays · backup queue starts Monday 9pm · 24h per person · ${esc(S.state.settings.tz || "UTC")}</p>`,
   }, async (f) => {
     if (!f.name?.trim()) { toast("Enter a name"); throw 0; }
@@ -483,13 +555,14 @@ function editMemberSheet(id) {
     body: `
     <label class="field"><span>Name</span><input type="text" name="name" maxlength="40" value="${esc(m.name)}" /></label>
     <label class="field"><span>WhatsApp number</span><input type="tel" name="phone" value="${esc(m.phone)}" placeholder="+1 555 123 4567" />
-      <div class="hint">Used for the one-tap nudge when the queue asks them.</div></label>`,
+      <div class="hint">Used for the one-tap nudge when the queue asks them.</div></label>
+    <label class="field"><span>Home address <i>for hosting</i></span><input type="text" name="address" maxlength="200" value="${esc(m.address)}" placeholder="Street, city" /></label>`,
     danger: `<button type="submit" class="btn text danger" name="_remove" value="1">${ic("trash")} Remove from group</button>`,
   }, async (f, submitter) => {
     if (submitter?.name === "_remove") {
       if (!confirm(`Remove ${m.name} from the group?`)) throw 0;
       await act("removeMember", { id });
-    } else await act("updateMember", { id, name: f.name, phone: f.phone });
+    } else await act("updateMember", { id, name: f.name, phone: f.phone, address: f.address });
     setTimeout(membersSheet, 0);
   });
 }
@@ -518,8 +591,13 @@ document.addEventListener("click", async (e) => {
       break;
     case "hadis": hadisSheet(w); break;
     case "host": hostSheet(w); break;
-    case "hostVol": act("toggleHostVolunteer").catch(() => {}); break;
-    case "unbring": act("removeBring", { id: el.dataset.id }).catch(() => {}); break;
+    case "rsvp": {
+      const v = el.dataset.v;
+      act("rsvp", { answer: rsvpOf(w)[me] === v ? null : v }).catch(() => {});
+      break;
+    }
+    case "rota": rotaSheet(); break;
+    case "rotaEdit": rotaEditSheet(); break;
     case "cancel":
       if (confirm(w.cancelled ? "Bring this week back?" : "Mark this week as no sohbet?")) act("setCancelled", { cancelled: !w.cancelled }).catch(() => {});
       break;
@@ -537,15 +615,21 @@ document.addEventListener("click", async (e) => {
   }
 });
 
+document.addEventListener("change", async (e) => {
+  const el = e.target.closest("[data-change]");
+  if (!el) return;
+  if (el.dataset.change === "defTime" && el.value) {
+    await act("setSettings", { defaultTime: el.value }).catch(() => {});
+    toast("Saved");
+  }
+});
+
 document.addEventListener("submit", async (e) => {
   const f = e.target.closest("[data-form]");
   if (!f) return;
   e.preventDefault();
   const data = Object.fromEntries(new FormData(f));
-  if (f.dataset.form === "bring") {
-    if (!data.item?.trim()) return;
-    await act("addBring", data).catch(() => {});
-  } else if (f.dataset.form === "join") {
+  if (f.dataset.form === "join") {
     if (!data.name?.trim()) return toast("Enter your name");
     try {
       const r = await api({ type: "addMember", ...data });
@@ -557,13 +641,16 @@ document.addEventListener("submit", async (e) => {
 
 function shareWeek() {
   const w = W();
+  const h = hostOf(w);
+  const place = weekPlace(w);
+  const yes = Object.values(rsvpOf(w)).filter((v) => v === "yes").length;
   const lines = [`*Sohbet · ${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}*`];
   if (w.cancelled) lines.push("No sohbet this week.");
   else {
-    if (w.time || w.place) lines.push(`🕗 ${fmtTime(w.time)}${w.place ? " · 📍 " + w.place : ""}`);
+    lines.push(`🏠 ${h ? nameOf(h.id) + " hosting" : "Host?"} · 🕖 ${fmtTime(weekTime(w))}${place ? "\n📍 " + place : ""}`);
     lines.push(`📖 Hadis: ${w.hadis ? (w.hadis.source || "posted") : "—"}`);
-    lines.push(`🎤 Konu: ${w.konu ? `${w.konu.title} (${nameOf(w.konu.presenterId)})` : "Open — volunteer here 👇"}`);
-    lines.push(`🏠 Host: ${w.host ? nameOf(w.host) : "Who can host?"}`);
+    lines.push(`🎤 Konu: ${w.konu ? `${w.konu.title} (${nameOf(w.konu.presenterId)})` : "Open — volunteer 👇"}`);
+    lines.push(`✅ Geliyorum: ${yes} · tap to answer 👇`);
   }
   lines.push(location.origin);
   const text = lines.join("\n");

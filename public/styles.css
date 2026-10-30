@@ -308,3 +308,30 @@ body.locked { overflow: hidden; }
 }
 .icon-btn:focus-visible, .btn:focus-visible, .wk:focus-visible, button.chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* week tab host name */
+.wk .dots { align-items: center; }
+.wk-host { font-size: 12px; color: var(--on-surface-var); margin-left: 4px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* geliyorum / gelemiyorum */
+.seg2 { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--outline); border-radius: 999px; overflow: hidden; }
+.seg2 button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 44px; border: 0; background: transparent;
+  cursor: pointer; font-weight: 500; font-size: 14px; color: var(--on-surface); transition: background .15s;
+}
+.seg2 button + button { border-left: 1px solid var(--outline); }
+.seg2 button b { font-weight: 600; color: var(--on-surface-var); margin-left: 2px; }
+.seg2 button .ic { width: 17px; height: 17px; }
+.seg2 button.on { background: var(--primary-container); color: var(--on-primary-container); }
+.seg2 button.on b { color: inherit; }
+.seg2 button.on.no { background: var(--surface-3); color: var(--on-surface); }
+.faces { display: flex; align-items: center; margin-top: 12px; flex-wrap: wrap; row-gap: 6px; }
+.faces > span[title] { margin-right: -6px; }
+.faces > span[title] .avatar { box-shadow: 0 0 0 2px var(--surface-1); }
+.faces .small { margin-left: 14px; }
+
+/* yemek sırası list */
+.sheet .list .date { width: 56px; flex: none; font-size: 13px; color: var(--on-surface-var); }
+.sheet .list li.now { background: var(--surface-1); border-radius: 12px; padding-inline: 8px; margin-inline: -8px; }
+.sheet .list li.now .date { color: var(--primary); font-weight: 600; }
+.kv a { color: inherit; text-decoration: underline; text-decoration-color: var(--outline); text-underline-offset: 3px; }

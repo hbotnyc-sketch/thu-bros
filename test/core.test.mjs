@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { emptyState, applyAction, advance, currentWeekId, cutoffAt, cooldownLeft, HOUR, zonedTime } from "../lib/core.mjs";
+import { emptyState, applyAction, advance, currentWeekId, cutoffAt, cooldownLeft, HOUR, zonedTime, hostFor, view } from "../lib/core.mjs";
 
 const TZ = "America/New_York";
 const at = (ds, h) => zonedTime(ds, h, TZ);
@@ -111,6 +111,32 @@ t("hadis, host, bring", () => {
   assert.equal(w.hadis.source, "Buhârî");
   assert.equal(w.host, ids[1]);
   assert.equal(w.bring[0].item, "Baklava");
+});
+
+t("yemek sırası: order from start date, repeats, per-week change, new names become members", () => {
+  const { s } = group(1, FRI); // M0 exists
+  const names = ["Berkay", "Harun", "Ahmet", "M0"];
+  const r = act(s, FRI, { type: "setRota", actor: s.members[0].id, names, start: "2026-11-05" });
+  assert.equal(r.created, 3);
+  const nm = (wk) => s.members.find((m) => m.id === hostFor(s, wk)?.id)?.name;
+  assert.equal(nm("2026-11-05"), "Berkay");
+  assert.equal(nm("2026-11-12"), "Harun");
+  assert.equal(nm("2026-11-26"), "M0");
+  const v = view(s, FRI);
+  assert.equal(s.members.find((m) => m.id === v.rotaPreview[4].host.id).name, "Berkay", "repeats after the end");
+  const harun = s.members.find((m) => m.name === "Harun").id;
+  act(s, FRI, { type: "setHost", weekId: "2026-11-05", actor: harun, hostId: harun });
+  assert.deepEqual(hostFor(s, "2026-11-05"), { id: harun, changed: true });
+  act(s, FRI, { type: "setHost", weekId: "2026-11-05", actor: harun, hostId: "" });
+  assert.equal(nm("2026-11-05"), "Berkay", "clearing the change follows the order again");
+});
+
+t("geliyorum / gelemiyorum", () => {
+  const { s, ids } = group(2, FRI);
+  act(s, FRI, { type: "rsvp", weekId: WEEK, actor: ids[0], answer: "yes" });
+  act(s, FRI, { type: "rsvp", weekId: WEEK, actor: ids[1], answer: "no" });
+  act(s, FRI, { type: "rsvp", weekId: WEEK, actor: ids[1], answer: "yes" });
+  assert.deepEqual(s.weeks[WEEK].rsvp, { [ids[0]]: "yes", [ids[1]]: "yes" });
 });
 
 console.log(`\n${pass} tests passed`);
