@@ -631,7 +631,17 @@ button.avatar { position: relative; }
 
 /* quick tour */
 .tour { position: fixed; inset: 0; z-index: 60; }
-.tour-hole { position: fixed; border-radius: 18px; box-shadow: 0 0 0 9999px rgba(10, 14, 12, .62); transition: all .35s cubic-bezier(.2,.8,.2,1); pointer-events: none; outline: 2px solid color-mix(in srgb, var(--primary-container) 80%, transparent); outline-offset: 2px; }
+.tour-hole {
+  position: fixed; border-radius: 18px; pointer-events: none; transition: all .35s cubic-bezier(.2,.8,.2,1);
+  /* darker surroundings + a bright glowing ring that hugs the block */
+  box-shadow: 0 0 0 2.5px #7fe3b4, 0 0 18px 4px rgba(127, 227, 180, .55), 0 0 0 9999px rgba(6, 9, 8, .84);
+  animation: tourGlow 1.8s ease-in-out infinite;
+}
+.tour-hole.cut { border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
+@keyframes tourGlow {
+  50% { box-shadow: 0 0 0 2.5px #a8f0cd, 0 0 26px 7px rgba(127, 227, 180, .7), 0 0 0 9999px rgba(6, 9, 8, .84); }
+}
+@media (prefers-reduced-motion: reduce) { .tour-hole { animation: none; } }
 .tour-tip { position: fixed; left: 12px; right: 12px; max-width: 420px; margin: 0 auto; background: var(--surface); color: var(--on-surface); border-radius: 20px; padding: 16px 16px 12px; box-shadow: 0 16px 40px rgba(0,0,0,.25); transition: top .35s cubic-bezier(.2,.8,.2,1); animation: rise .3s ease-out; }
 .tour-tip h3 { margin: 2px 0 6px; font-size: 18px; font-weight: 600; }
 .tour-tip p { margin: 0 0 12px; font-size: 15px; line-height: 1.5; color: var(--on-surface-var); }

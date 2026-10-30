@@ -1591,11 +1591,11 @@ function renderDemoWho() {
 
 /* ---------- quick tour (first sign-in; 5 short steps) ---------- */
 const TOUR = [
-  { sel: () => [$(".weeks")], title: "Every Thursday", text: "Each tab is a sohbet. 🏠 is the host, ✓ means the host confirmed, and ● means someone is giving the sunum." },
-  { sel: () => [$("[data-tour=rsvp]")], title: "Coming?", text: "Tap Geliyorum or Gelemiyorum so the host knows the count. The address and time show up here once the host confirms." },
+  { sel: () => [$(".weeks")], title: "Every Thursday", text: "🏠 is the host and ✓ means they confirmed. A filled ● means someone has volunteered for the sunum." },
+  { sel: () => [$("[data-tour=rsvp]")], title: "Coming?", text: "Vote so the host knows the count. Once the host confirms, the time and a tappable address show up here, with gate and parking notes." },
   { sel: () => [$("[data-tour=sunum]")], title: "Sunum", text: "Each week one of us gives a short 10–15 min talk. Tap Take to volunteer and add your topic." },
-  { sel: () => [$("[data-tour=hadis]")], title: "Hadis & Sohbet", text: "İhsan shares the hadis and Harun the sohbet notes before Thursday, so you can skim them ahead." },
-  { sel: () => [$(".topbar [data-a=chat]"), $(".topbar [data-a=notifs]"), $(".topbar [data-a=profile]")], title: "Stay in the loop", text: "💬 group & private chat, 🔔 updates, and your profile with personal notes. That's it, hoş geldin!" },
+  { sel: () => [$("[data-tour=hadis]")], title: "Hadis & Sohbet", text: "Ihsan and Harun share the hadis and sohbet notes beforehand. Skim them to get more out of the sohbet." },
+  { sel: () => [$(".topbar [data-a=chat]"), $(".topbar [data-a=notifs]"), $(".topbar [data-a=profile]")], title: "Stay in the loop", text: "💬 chat, 🔔 updates, and your profile with personal notes. That's it, hoş geldin!" },
 ];
 let tourStep = -1, tourEls = null;
 const tourDone = () => store.get("tourDone") === "1";
@@ -1654,11 +1654,16 @@ function tourPlace() {
   if (!tourEls || tourStep < 0) return;
   const rs = tourTargets(tourStep).map((e) => e.getBoundingClientRect());
   if (!rs.length) return;
-  const pad = 8;
+  const els = tourTargets(tourStep);
+  const own = els.length === 1 ? parseFloat(getComputedStyle(els[0]).borderTopLeftRadius) || 0 : 0;
+  const pad = els.length > 1 ? 6 : own ? 4 : 12;   // cards hug tightly; plain sections get breathing room
+  const radius = els.length > 1 ? 24 : (own || 8) + pad;
   const r = { l: Math.min(...rs.map((x) => x.left)) - pad, t: Math.min(...rs.map((x) => x.top)) - pad,
               r: Math.max(...rs.map((x) => x.right)) + pad, b: Math.max(...rs.map((x) => x.bottom)) + pad };
   r.b = Math.min(r.b, r.t + innerHeight * 0.45); // tall cards: spotlight the top part, leave room for the message
   const hole = tourEls.querySelector(".tour-hole");
+  hole.style.borderRadius = `${radius}px`;
+  hole.classList.toggle("cut", r.b - r.t >= innerHeight * 0.45 - 1);
   Object.assign(hole.style, { left: `${Math.max(4, r.l)}px`, top: `${r.t}px`, width: `${Math.min(innerWidth - 8, r.r) - Math.max(4, r.l)}px`, height: `${r.b - r.t}px` });
   const tip = tourEls.querySelector(".tour-tip");
   const th = tip.offsetHeight, below = innerHeight - r.b, gap = 12;
