@@ -113,6 +113,8 @@ async function act(type, data = {}) {
 }
 async function refresh() {
   if (document.querySelector("details.private[open]")) return; // don't wipe private notes being written
+  const a = document.activeElement; // don't interrupt typing (e.g. archive search)
+  if (a && $("#app").contains(a) && a.matches("input, textarea, select")) return;
   try { await api(); render(); refreshChatSummary(); } catch (e) { if (!S) showError(e.message); }
 }
 
@@ -523,7 +525,7 @@ function renderKonu(w) {
       ${mine ? `<button class="icon-btn" data-a="editKonu" aria-label="Edit topic">${ic("edit")}</button>` : ""}</div>
     <div class="person">${avatar(k.presenterId, "lg")}
       <div><div class="who">${esc(nameOf(k.presenterId))}</div>
-      <div class="sub">${k.via === "queue" ? "Stepped up from the queue" : "Volunteered"} · jazakallah</div></div></div>
+      <div class="sub">${mine ? "You're presenting" : k.via === "queue" ? "Stepped up from the queue" : "Volunteered"} · jazakallah</div></div></div>
     <p class="title">${esc(k.title)}</p>
     <div class="chips" style="margin-bottom:6px"><span class="chip on">${esc(typeLabel(k.topicType))}</span></div>
     ${k.summary ? `<p class="notes" style="margin-top:8px">${esc(k.summary)}</p>` : ""}

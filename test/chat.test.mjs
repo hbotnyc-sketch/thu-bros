@@ -6,7 +6,8 @@ const sqlite = new DatabaseSync(":memory:");
 const DB = {
   prepare(sql) { const st = { args: [] }; const ex = () => sqlite.prepare(sql);
     return Object.assign(st, { bind(...a) { st.args = a; return st; }, async all() { return { results: ex().all(...st.args) }; },
-      async run() { const r = ex().run(...st.args); return { meta: { last_row_id: Number(r.lastInsertRowid) } }; } }); },
+      async run() { const r = ex().run(...st.args); return { meta: { last_row_id: Number(r.lastInsertRowid), changes: r.changes } }; },
+      async first() { return ex().get(...st.args) ?? null; } }); },
   async batch(x) { return Promise.all(x.map((s) => s.run())); },
 };
 const state = { members: [{ id: "aaaa1111", name: "A" }, { id: "bbbb2222", name: "B" }, { id: "cccc3333", name: "C" }] };
@@ -44,5 +45,31 @@ await t("unknown people and rooms are rejected", async () => {
   assert.equal((await call(`/api/chat?conv=general&actor=nobody`)).status, 401);
   assert.equal((await call(`/api/chat?conv=dm:aaaa1111:zzzz9999&actor=${A}`)).status, 404);
   assert.equal((await call(`/api/chat?conv=general&actor=${A}`, { method: "POST", body: "  " })).status, 400);
+});
+await t("D1 state store: stale writes are rejected so the server retries (no lost updates)", async () => {
+  const { d1Store } = await import("../lib/d1-store.mjs");
+  const kv = { async get() { return { members: [], weeks: {}, from: "kv" }; } };
+  const st = d1Store(DB, kv);
+  const first = await st.load();
+  assert.equal(first.data.from, "kv", "migrates from KV on first run"); assert.equal(first.etag, null);
+  assert.ok(await st.save({ n: 1 }, null));
+  const a = await st.load(), b = await st.load();      // two people read the same version
+  assert.ok(await st.save({ n: 2, who: "a" }, a.etag)); // A saves first
+  assert.equal(await st.save({ n: 2, who: "b" }, b.etag), false, "B's stale save is refused");
+  const c = await st.load(); assert.equal(c.data.who, "a");
+  assert.ok(await st.save({ n: 3, who: "b" }, c.etag), "B retries on fresh data");
+});
+await t("server retries on conflict: two simultaneous RSVPs both land", async () => {
+  const { d1Store } = await import("../lib/d1-store.mjs");
+  const { handleRequest } = await import("../lib/server.mjs");
+  sqlite.exec("DELETE FROM app_state");
+  const st = d1Store(DB, null);
+  const post = (b) => handleRequest(new Request("https://x/api", { method: "POST", body: JSON.stringify(b) }), st).then((r) => r.json());
+  let s0 = await post({ type: "init", tz: "America/New_York" });
+  const x = (await post({ type: "addMember", name: "X" })).result.id, y = (await post({ type: "addMember", name: "Y" })).result.id;
+  const wk = s0.currentWeekId;
+  await Promise.all([post({ type: "rsvp", actor: x, weekId: wk, answer: "yes" }), post({ type: "rsvp", actor: y, weekId: wk, answer: "yes" })]);
+  const fin = (await st.load()).data.weeks[wk].rsvp;
+  assert.deepEqual(Object.keys(fin).sort(), [x, y].sort());
 });
 console.log(`\n${pass} chat tests passed`);

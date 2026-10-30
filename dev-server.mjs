@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { handleRequest } from "./lib/server.mjs";
 import { handleArchive } from "./lib/archive-server.mjs";
+import { d1Store } from "./lib/d1-store.mjs";
 
 const PORT = +process.env.PORT || 8888;
 const FILE = path.resolve(".data/state.json");
@@ -69,9 +70,10 @@ http.createServer(async (req, res) => {
     const chunks = [];
     for await (const c of req) chunks.push(c);
     const request = new Request(url, { method: req.method, headers: req.headers, body: chunks.length ? Buffer.concat(chunks) : undefined, duplex: "half" });
+    const store = d1Store(d1, null); // same storage as production
     const r = url.pathname === "/api"
-      ? await handleRequest(request, fileStore, Date.now() + offset)
-      : await handleArchive(request, devEnv, fileStore);
+      ? await handleRequest(request, store, Date.now() + offset)
+      : await handleArchive(request, devEnv, store);
     res.writeHead(r.status, Object.fromEntries(r.headers));
     return res.end(Buffer.from(await r.arrayBuffer()));
   }
