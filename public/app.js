@@ -1956,7 +1956,7 @@ function showWelcomeHadith() {
   let done = false;
   const close = () => { if (done) return; done = true; el.classList.add("out"); setTimeout(() => el.remove(), 300); };
   el.addEventListener("click", close);
-  setTimeout(close, 2500);
+  setTimeout(close, 3000);
   document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", k); } });
   document.body.appendChild(el);
 }
