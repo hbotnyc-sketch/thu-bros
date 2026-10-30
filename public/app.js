@@ -1294,13 +1294,15 @@ function showWelcomeHadith() {
       <div class="welcome-lbl">Hz. Peygamber (s.a.v.) buyurdu:</div>
       <blockquote class="welcome-q">${esc(h.t)}</blockquote>
       <div class="welcome-src">${esc(h.s)}</div>
-      <button class="btn filled lg block" data-welcome>Bismillah</button>
+      <div class="welcome-timer"><span></span></div>
+      <div class="welcome-hint">Tap anywhere to continue</div>
     </div>`;
-  const close = () => { el.classList.add("out"); setTimeout(() => el.remove(), 250); };
-  el.addEventListener("click", (e) => { if (e.target === el || e.target.closest("[data-welcome]")) close(); });
+  let done = false;
+  const close = () => { if (done) return; done = true; el.classList.add("out"); setTimeout(() => el.remove(), 300); };
+  el.addEventListener("click", close);
+  setTimeout(close, 5000);
   document.addEventListener("keydown", function k(e) { if (e.key === "Escape" || e.key === "Enter") { close(); document.removeEventListener("keydown", k); } });
   document.body.appendChild(el);
-  setTimeout(() => el.querySelector("[data-welcome]")?.focus(), 50);
 }
 
 /* ---------- boot ---------- */
