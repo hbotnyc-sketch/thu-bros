@@ -1,0 +1,116 @@
+import assert from "node:assert/strict";
+import { emptyState, applyAction, advance, currentWeekId, cutoffAt, cooldownLeft, HOUR, zonedTime } from "../lib/core.mjs";
+
+const TZ = "America/New_York";
+const at = (ds, h) => zonedTime(ds, h, TZ);
+let pass = 0;
+const t = (name, fn) => { fn(); pass++; console.log("✓", name); };
+
+function group(n, now) {
+  const s = emptyState();
+  applyAction(s, { type: "init", tz: TZ }, now);
+  const ids = [];
+  for (let i = 0; i < n; i++) ids.push(applyAction(s, { type: "addMember", name: "M" + i }, now).id);
+  return { s, ids };
+}
+const act = (s, now, a) => { advance(s, now); const r = applyAction(s, a, now); advance(s, now); return r; };
+
+const FRI = at("2026-10-30", 10);
+const WEEK = "2026-11-05";
+
+t("current week is the coming Thursday; Thursday itself still counts", () => {
+  const { s } = group(1, FRI);
+  assert.equal(currentWeekId(s, FRI), WEEK);
+  assert.equal(currentWeekId(s, at("2026-11-05", 23)), WEEK);
+  assert.equal(currentWeekId(s, at("2026-11-06", 0) + 1), "2026-11-12");
+});
+
+t("cutoff is Monday 9pm local (across the DST change)", () => {
+  const { s } = group(1, FRI);
+  assert.equal(new Date(cutoffAt(s, WEEK)).toISOString(), "2026-11-03T02:00:00.000Z"); // EST = UTC-5
+});
+
+t("volunteer claims → cooldown until 5 others present", () => {
+  const { s, ids } = group(8, FRI);
+  act(s, FRI, { type: "claimKonu", weekId: WEEK, actor: ids[0], title: "Huvallahüllezi" });
+  assert.equal(cooldownLeft(s, ids[0]), 5);
+  assert.throws(() => act(s, FRI, { type: "claimKonu", weekId: "2026-11-12", actor: ids[0], title: "x" }), /recently/);
+  // 5 others present in following weeks
+  let wk = "2026-11-12";
+  for (let i = 1; i <= 5; i++) {
+    s.weeks[wk] ??= { ...structuredClone(s.weeks[WEEK]), id: wk, konu: null, ask: null, askLog: [] };
+    act(s, FRI, { type: "claimKonu", weekId: wk, actor: ids[i], title: "t" + i });
+    wk = new Date(Date.parse(wk) + 7 * 864e5).toISOString().slice(0, 10);
+  }
+  assert.equal(cooldownLeft(s, ids[0]), 0);
+});
+
+t("small group: cooldown capped at members − 1", () => {
+  const { s, ids } = group(3, FRI);
+  act(s, FRI, { type: "claimKonu", weekId: WEEK, actor: ids[0], title: "x" });
+  assert.equal(cooldownLeft(s, ids[0]), 2);
+});
+
+t("no volunteer → queue asks first person at cutoff, hands off after 24h / on no", () => {
+  const { s, ids } = group(4, FRI);
+  advance(s, at("2026-11-02", 20));
+  assert.equal(s.weeks[WEEK].ask, null, "not yet before cutoff");
+  const c = at("2026-11-02", 21);
+  advance(s, c);
+  assert.equal(s.weeks[WEEK].ask.memberId, ids[0]);
+  advance(s, c + 23 * HOUR);
+  assert.equal(s.weeks[WEEK].ask.memberId, ids[0]);
+  advance(s, c + 24 * HOUR);
+  assert.equal(s.weeks[WEEK].ask.memberId, ids[1], "timeout → next");
+  assert.deepEqual(s.queue, [ids[1], ids[2], ids[3], ids[0]], "timed-out person moved to end");
+  act(s, c + 25 * HOUR, { type: "answerAsk", weekId: WEEK, actor: ids[1] });
+  assert.equal(s.weeks[WEEK].ask.memberId, ids[2], "no → next immediately");
+  act(s, c + 26 * HOUR, { type: "claimKonu", weekId: WEEK, actor: ids[2], title: "Miraç" });
+  assert.equal(s.weeks[WEEK].konu.via, "queue");
+  assert.equal(s.weeks[WEEK].ask, null);
+});
+
+t("queue skips people in cooldown; exhausted queue opens slot to anyone", () => {
+  const { s, ids } = group(2, FRI);
+  // ids[0] presented last week
+  s.weeks["2026-10-29"] = { ...structuredClone(s.weeks[WEEK]), id: "2026-10-29", konu: { presenterId: ids[0], title: "old" } };
+  const c = at("2026-11-02", 21);
+  advance(s, c);
+  assert.equal(s.weeks[WEEK].ask.memberId, ids[1]);
+  act(s, c + HOUR, { type: "answerAsk", weekId: WEEK, actor: ids[1] });
+  assert.equal(s.weeks[WEEK].ask, null, "queue exhausted");
+  act(s, c + 2 * HOUR, { type: "claimKonu", weekId: WEEK, actor: ids[0], title: "steps in" });
+  assert.equal(s.weeks[WEEK].konu.presenterId, ids[0]);
+});
+
+t("volunteer during an ask clears it; release reopens + restores cooldown", () => {
+  const { s, ids } = group(3, FRI);
+  const c = at("2026-11-02", 21);
+  advance(s, c);
+  act(s, c + HOUR, { type: "claimKonu", weekId: WEEK, actor: ids[2], title: "x" });
+  assert.equal(s.weeks[WEEK].ask, null);
+  act(s, c + 2 * HOUR, { type: "releaseKonu", weekId: WEEK, actor: ids[2] });
+  assert.equal(cooldownLeft(s, ids[2]), 0);
+  assert.ok(s.weeks[WEEK].ask, "queue resumes after release");
+});
+
+t("cancelled week never asks", () => {
+  const { s, ids } = group(3, FRI);
+  act(s, FRI, { type: "setCancelled", weekId: WEEK, actor: ids[0], cancelled: true });
+  advance(s, at("2026-11-03", 12));
+  assert.equal(s.weeks[WEEK].ask, null);
+});
+
+t("hadis, host, bring", () => {
+  const { s, ids } = group(3, FRI);
+  act(s, FRI, { type: "setHadis", weekId: WEEK, actor: ids[0], text: "Ameller niyetlere göredir.", source: "Buhârî" });
+  act(s, FRI, { type: "toggleHostVolunteer", weekId: WEEK, actor: ids[1] });
+  act(s, FRI, { type: "setHost", weekId: WEEK, actor: ids[1], hostId: ids[1], place: "Ahmet's", time: "20:00" });
+  act(s, FRI, { type: "addBring", weekId: WEEK, actor: ids[2], item: "Baklava" });
+  const w = s.weeks[WEEK];
+  assert.equal(w.hadis.source, "Buhârî");
+  assert.equal(w.host, ids[1]);
+  assert.equal(w.bring[0].item, "Baklava");
+});
+
+console.log(`\n${pass} tests passed`);
