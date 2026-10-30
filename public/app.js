@@ -160,6 +160,8 @@ const hostOf = (w) => S.hosts?.[w.id] || null;
 const weekTime = (w) => w.customTime || S.state.settings.defaultTime;
 const weekPlace = (w) => w.place || member(hostOf(w)?.id)?.address || "";
 const rsvpOf = (w) => w.rsvp || {};
+const roleId = (r) => { const id = S.state.settings.roles?.[r]; return id && member(id) ? id : null; };
+const canEdit = (r) => !roleId(r) || roleId(r) === me;
 const shortDate = (id) => fmtDate(id, { weekday: "short", month: "short", day: "numeric" });
 /** Upcoming week this member is presenting (if any) */
 const upcomingTalk = (id) => Object.values(S.state.weeks)
@@ -192,6 +194,7 @@ function render() {
       ${renderWeekHead(w)}
       ${w.cancelled ? `<div class="banner">${ic("ban")} No sohbet this week.</div>` : ""}
       ${renderHadis(w)}
+      ${renderSohbet(w)}
       ${renderKonu(w)}
       ${renderHost(w)}
       ${renderArchive()}
@@ -227,10 +230,10 @@ function renderPrompt() {
   if (w.ask) {
     const who = member(w.ask.memberId);
     const remain = w.ask.askedAt + 24 * HOUR - t;
-    const msg = `Selam ${who?.name || ""}! No one volunteered for Konu this ${day} (${fmtDate(w.id, { month: "short", day: "numeric" })}). Can you present? Answer here: ${location.origin}`;
+    const msg = `Selam ${who?.name || ""}! No one volunteered for the sunum this ${day} (${fmtDate(w.id, { month: "short", day: "numeric" })}). Can you present? Answer here: ${location.origin}`;
     return `<section class="hero quiet"><div class="quiet-row">
       ${avatar(w.ask.memberId, "sm")}
-      <div class="grow">No volunteer yet — asking <b>${esc(who?.name)}</b> · ${left(remain)} left</div>
+      <div class="grow">No volunteer for sunum yet — asking <b>${esc(who?.name)}</b> · ${left(remain)} left</div>
       <a class="btn text" href="${waLink(who?.phone, msg)}" target="_blank" rel="noopener">${ic("chat")} Nudge</a>
     </div>
     ${canClaim(w) ? `<div class="row" style="margin-top:8px"><button class="btn outlined" data-a="claim" data-week="${w.id}">Actually, I'll take it</button></div>` : ""}
@@ -241,7 +244,7 @@ function renderPrompt() {
   if (!beforeCutoff) {
     return `<section class="hero">
       <div class="deco">${ic("mic")}</div>
-      <h2>This week's Konu is still open</h2>
+      <h2>This week's sunum is still open</h2>
       <p>Everyone in the queue has passed. Anyone can step in — even a short reflection helps.</p>
       <button class="btn filled lg" data-a="claim" data-week="${w.id}">${ic("mic")} I'll take it</button>
     </section>`;
@@ -264,7 +267,7 @@ function renderPrompt() {
   return `<section class="hero">
     <div class="deco">${ic("mic")}</div>
     <span class="chip">${ic("clock")} ${countdown}</span>
-    <h2>Konu for ${esc(shortDate(w.id))} is open — want to take it?</h2>
+    <h2>Sunum for ${esc(shortDate(w.id))} is open — want to take it?</h2>
     <p>Share something for 10–15 min: an Esma like Huvallahüllezi, an ayet, Miraç, or a day-to-day iman topic.</p>
     <button class="btn filled lg" data-a="claim" data-week="${w.id}">${ic("mic")} I'll take it</button>
   </section>`;
@@ -305,17 +308,32 @@ function clampBlock(key, text) {
 }
 
 function renderHadis(w) {
-  const h = w.hadis;
+  const h = w.hadis, owner = roleId("hadis"), edit = canEdit("hadis");
   return `<section class="card">
     <div class="card-h"><span class="badge">${ic("book")}</span><h3>Hadis</h3>
-      ${h ? `<button class="icon-btn" data-a="hadis" aria-label="Edit hadis">${ic("edit")}</button>` : ""}</div>
+      ${owner ? `<span class="owner">${esc(nameOf(owner))}</span>` : ""}
+      ${h && edit ? `<button class="icon-btn" data-a="hadis" aria-label="Edit hadis">${ic("edit")}</button>` : ""}</div>
     ${h ? `
       <p class="quote">${esc(h.text)}</p>
       ${h.source ? `<div class="src">— ${esc(h.source)}</div>` : ""}
-      ${h.notes ? `<div class="notes-box"><div class="lbl">Discussion notes</div>${clampBlock("h" + w.id, h.notes)}</div>` : ""}
-      <div class="small muted" style="margin-top:12px">Shared by ${esc(nameOf(h.by))}</div>`
-    : `${sampleHadis()}
-       <button class="btn tonal" data-a="hadis">${ic("plus")} Add hadis</button>`}
+      ${h.notes ? `<div class="notes-box"><div class="lbl">Discussion notes</div>${clampBlock("h" + w.id, h.notes)}</div>` : ""}`
+    : edit ? `${sampleHadis()}<button class="btn tonal" data-a="hadis">${ic("plus")} Add hadis</button>`
+    : `<p class="empty" style="margin:0">${esc(nameOf(owner))} will post this week's hadis here.</p>`}
+  </section>`;
+}
+
+function renderSohbet(w) {
+  const so = w.sohbet, owner = roleId("sohbet"), edit = canEdit("sohbet");
+  return `<section class="card">
+    <div class="card-h"><span class="badge">${ic("chat")}</span><h3>Sohbet</h3>
+      ${owner ? `<span class="owner">${esc(nameOf(owner))}</span>` : ""}
+      ${so && edit ? `<button class="icon-btn" data-a="sohbet" aria-label="Edit sohbet">${ic("edit")}</button>` : ""}</div>
+    ${so ? `
+      ${so.title ? `<p class="title">${esc(so.title)}</p>` : ""}
+      ${so.notes ? `<div class="notes-box"><div class="lbl">Notes · skim before sohbet</div>${clampBlock("s" + w.id, so.notes)}</div>` : ""}
+      ${so.link ? `<div class="actions"><a class="btn outlined" href="${esc(so.link)}" target="_blank" rel="noopener">${ic("link")} Open link</a></div>` : ""}`
+    : edit ? `${sampleSohbet()}<button class="btn tonal" data-a="sohbet">${ic("plus")} Add sohbet topic</button>`
+    : `<p class="empty" style="margin:0">${esc(nameOf(owner))} will share the sohbet topic and notes here before Thursday.</p>`}
   </section>`;
 }
 
@@ -348,12 +366,24 @@ ${instr("hazırlık notları: ayet/meal, ana noktalar, sorular — herkes önced
   </div>`;
 }
 
+function sampleSohbet() {
+  return `<div class="sample" aria-label="Example">
+    <span class="sample-tag">Örnek · instruction sample</span>
+    <p class="title">Tevekkül: sebebe sarılıp Allah'a dayanmak ${instr("bu haftanın sohbet konusu")}</p>
+    <div class="notes-box"><div class="lbl">Notes · skim before sohbet</div><div class="notes">• Âl-i İmrân 159: "…Bir kere de karar verdin mi, artık Allah'a tevekkül et."
+• "Deveni bağla, sonra tevekkül et." (Tirmizî, Kıyâmet 60)
+• Soru: İş/okul stresinde tevekkülü nasıl yaşarız?
+${instr("ayetler, hadisler, ana noktalar, sorular — herkes sohbetten önce göz atar")}</div></div>
+    <p class="instr block">(Bu bir örnektir, sadece sana görünüyor ve gerçek konu eklenince kaybolur. "Add sohbet topic"e bas → başlık + notlar (+ link istersen) → Save. Bir gün önce paylaşırsan herkes okuyup gelir.)</p>
+  </div>`;
+}
+
 function renderKonu(w) {
   const k = w.konu;
   if (!k) {
     const asking = w.ask ? (w.ask.memberId === me ? "The backup queue is asking you this week." : `Backup queue is asking ${esc(nameOf(w.ask.memberId))}.`) : "Open — waiting for a volunteer.";
     return `<section class="card">
-      <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Konu</h3></div>
+      <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Sunum</h3><span class="owner">rotating</span></div>
       <p class="empty">${w.cancelled ? "—" : asking}</p>
       ${w.cancelled ? "" : sampleKonu()}
       ${canClaim(w) ? `<button class="btn tonal" data-a="claim" data-week="${w.id}">${ic("mic")} ${w.ask?.memberId === me ? "Yes, I'll present" : `Take ${fmtDate(w.id, { month: "short", day: "numeric" })}`}</button>` : ""}
@@ -362,8 +392,8 @@ function renderKonu(w) {
   }
   const mine = k.presenterId === me;
   return `<section class="card">
-    <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Konu</h3>
-      <button class="icon-btn" data-a="editKonu" aria-label="Edit topic">${ic("edit")}</button></div>
+    <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Sunum</h3>
+      ${mine ? `<button class="icon-btn" data-a="editKonu" aria-label="Edit topic">${ic("edit")}</button>` : ""}</div>
     <div class="person">${avatar(k.presenterId, "lg")}
       <div><div class="who">${esc(nameOf(k.presenterId))}</div>
       <div class="sub">${k.via === "queue" ? "Stepped up from the queue" : "Volunteered"} · jazakallah</div></div></div>
@@ -421,20 +451,36 @@ function renderArchive() {
 
 /* ---------- who are you ---------- */
 function renderWho() {
-  const list = [...members()].sort((a, b) => a.name.localeCompare(b.name));
   $("#app").innerHTML = `<main class="who-page">
     <div class="logo">${logo()}</div>
     <h1>Selamün aleyküm</h1>
     <div class="who-brand">Thursday Bros · weekly sohbet</div>
-    <p>Tap your name so the group knows who's who. This phone will remember you.</p>
-    ${list.length ? `<div class="name-grid">${list.map((m) => `<button data-a="iam" data-id="${m.id}">${avatar(m.id, "sm")}${esc(m.name)}</button>`).join("")}</div>
-    <div class="divider">Not in the list?</div>` : ""}
-    <form data-form="join">
-      <label class="field"><span>Your name</span><input type="text" name="name" maxlength="40" autocomplete="given-name" required /></label>
-      <label class="field"><span>WhatsApp number (optional)</span><input type="tel" name="phone" placeholder="+1 555 123 4567" autocomplete="tel" />
-        <div class="hint">Only used for a one-tap nudge if the queue asks you to present.</div></label>
-      <button class="btn filled lg block" type="submit">Join the sohbet</button>
-    </form></main>`;
+    <p>Start typing your name and pick yourself from the list. This phone will remember you.</p>
+    <div class="picker">
+      <div class="picker-box">${ic("users")}<input type="text" id="who-q" placeholder="Your name" autocomplete="off" autocapitalize="words" spellcheck="false" aria-label="Your name" aria-controls="who-list" /></div>
+      <ul class="picker-list" id="who-list" role="listbox"></ul>
+    </div>
+  </main>`;
+  const q = $("#who-q");
+  const draw = () => {
+    const t = fold(q.value.trim());
+    const list = [...members()].sort((a, b) => a.name.localeCompare(b.name))
+      .filter((m) => !t || fold(m.name).includes(t))
+      .sort((a, b) => (fold(a.name).startsWith(t) ? 0 : 1) - (fold(b.name).startsWith(t) ? 0 : 1));
+    const exact = members().some((m) => fold(m.name) === t);
+    $("#who-list").innerHTML = list.slice(0, 30).map((m) => `<li><button type="button" role="option" data-a="iam" data-id="${m.id}">${avatar(m.id, "sm")}<span>${hl(m.name, t)}</span></button></li>`).join("")
+      + (t && !exact ? `<li><button type="button" class="new" data-a="join" data-name="${esc(q.value.trim())}">${ic("plus")}<span>I'm new — add “${esc(q.value.trim())}”</span></button></li>` : "")
+      + (!list.length && !t ? `<li class="muted small" style="padding:12px">No one here yet — type your name to join.</li>` : "");
+  };
+  q.addEventListener("input", draw);
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#who-list button")?.click(); } });
+  draw();
+}
+const fold = (t) => String(t).toLocaleLowerCase("tr").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ı/g, "i");
+function hl(name, t) {
+  if (!t) return esc(name);
+  const i = fold(name).indexOf(t);
+  return i < 0 ? esc(name) : esc(name.slice(0, i)) + "<b>" + esc(name.slice(i, i + t.length)) + "</b>" + esc(name.slice(i + t.length));
 }
 
 /* ---------- sheets ---------- */
@@ -444,7 +490,7 @@ function topicSheet(w, existing) {
   const k = existing || {};
   const isAsk = w.ask?.memberId === me;
   openSheet({
-    title: existing ? "Edit topic" : isAsk ? "What will you share?" : `Konu · ${fmtDate(w.id, { month: "short", day: "numeric" })}`,
+    title: existing ? "Edit sunum" : isAsk ? "What will you share?" : `Sunum · ${fmtDate(w.id, { month: "short", day: "numeric" })}`,
     lead: `${weekLabel(w)} · a title is enough to start.`,
     action: existing ? "Save" : "Take it",
     body: `
@@ -553,6 +599,24 @@ function parseLooseDate(t) {
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+function sohbetSheet(w) {
+  const so = w.sohbet || {};
+  openSheet({
+    title: w.sohbet ? "Edit sohbet" : "Add sohbet topic",
+    lead: `${weekLabel(w)} · share a day before so people can skim it.`,
+    body: `
+    <label class="field"><span>Topic</span><input type="text" name="title" maxlength="140" value="${esc(so.title)}" placeholder="e.g. Tevekkül" /></label>
+    <label class="field"><span>Notes</span><textarea name="notes" rows="8" maxlength="8000" placeholder="Ayetler, hadisler, ana noktalar, sorular…">${esc(so.notes)}</textarea></label>
+    <label class="field"><span>Link <i>optional</i></span><input type="url" name="link" value="${esc(so.link)}" placeholder="https://…" inputmode="url" /></label>`,
+    danger: w.sohbet ? `<button type="submit" class="btn text danger" name="_clear" value="1">${ic("trash")} Remove</button>` : "",
+  }, async (f, submitter) => {
+    if (submitter?.name === "_clear") { if (!confirm("Remove this sohbet topic?")) throw 0; f.title = ""; f.notes = ""; }
+    else if (!f.title?.trim() && !f.notes?.trim()) { toast("Add a topic or notes"); throw 0; }
+    await act("setSohbet", { weekId: w.id, ...f });
+    toast("Saved");
+  });
+}
+
 function membersSheet() {
   const q = S.state.queue.filter((id) => member(id));
   const cd = S.state.settings.cooldown;
@@ -578,6 +642,10 @@ function membersSheet() {
     <div class="section-lbl">Settings</div>
     <div class="setting"><div>Break after presenting<div class="small muted">Prompt hides until this many others present (now ${S.effectiveCooldown} for this group size)</div></div>
       <div class="stepper"><button type="button" data-a="cd" data-d="-1" aria-label="Less">−</button><b>${cd}</b><button type="button" data-a="cd" data-d="1" aria-label="More">+</button></div></div>
+    <div class="setting"><div>Hadis<div class="small muted">Only this person can post the hadis</div></div>
+      <select data-change="role" data-role="hadis" style="width:auto;max-width:46%" aria-label="Hadis person">${roleOptions("hadis")}</select></div>
+    <div class="setting"><div>Sohbet<div class="small muted">Only this person can post the sohbet</div></div>
+      <select data-change="role" data-role="sohbet" style="width:auto;max-width:46%" aria-label="Sohbet person">${roleOptions("sohbet")}</select></div>
     <div class="setting"><div>Usual start time<div class="small muted">Each week can still be changed</div></div>
       <input type="time" value="${esc(S.state.settings.defaultTime)}" data-change="defTime" style="width:auto" aria-label="Usual start time" /></div>
     <div class="setting"><div>Yemek sırası<div class="small muted">${(S.state.settings.hostRota || []).length} people</div></div>
@@ -589,6 +657,12 @@ function membersSheet() {
     toast(`${f.name.trim()} added`);
     setTimeout(membersSheet, 0);
   });
+}
+
+function roleOptions(r) {
+  const cur = roleId(r);
+  return `<option value="">Anyone</option>` + [...members()].sort((a, b) => a.name.localeCompare(b.name))
+    .map((m) => `<option value="${m.id}" ${m.id === cur ? "selected" : ""}>${esc(m.name)}</option>`).join("");
 }
 
 function editMemberSheet(id) {
@@ -618,7 +692,14 @@ document.addEventListener("click", async (e) => {
   const w = S && sel ? W() : null;
   switch (a) {
     case "close": closeSheet(); break;
-    case "iam": me = el.dataset.id; store.set("sohbet.me", me); render(); break;
+    case "iam": me = el.dataset.id; store.set("sohbet.me", me); render(); toast(`Selam, ${nameOf(me)}!`); break;
+    case "join":
+      try {
+        const r = await api({ type: "addMember", name: el.dataset.name });
+        me = r.id; store.set("sohbet.me", me); render();
+        toast(`Hoş geldin, ${el.dataset.name}!`);
+      } catch (err) { toast(err.message); }
+      break;
     case "switch":
       if (confirm(`You're ${nameOf(me)}. Switch to a different name?`)) { me = null; store.set("sohbet.me", null); render(); }
       break;
@@ -633,6 +714,7 @@ document.addEventListener("click", async (e) => {
       if (confirm("No problem — pass to the next person?")) { await act("answerAsk", { weekId: S.currentWeekId }).catch(() => {}); toast("Passed on — maybe next time!"); }
       break;
     case "hadis": hadisSheet(w); break;
+    case "sohbet": sohbetSheet(w); break;
     case "host": hostSheet(w); break;
     case "rsvp": {
       const v = el.dataset.v;
@@ -661,6 +743,11 @@ document.addEventListener("click", async (e) => {
 document.addEventListener("change", async (e) => {
   const el = e.target.closest("[data-change]");
   if (!el) return;
+  if (el.dataset.change === "role") {
+    await act("setRoles", { [el.dataset.role]: el.value || null }).catch(() => {});
+    toast("Saved");
+    return;
+  }
   if (el.dataset.change === "defTime" && el.value) {
     await act("setSettings", { defaultTime: el.value }).catch(() => {});
     toast("Saved");
@@ -692,7 +779,8 @@ function shareWeek() {
   else {
     lines.push(`🏠 ${h ? nameOf(h.id) + " hosting" : "Host?"} · 🕖 ${fmtTime(weekTime(w))}${place ? "\n📍 " + place : ""}`);
     lines.push(`📖 Hadis: ${w.hadis ? (w.hadis.source || "posted") : "—"}`);
-    lines.push(`🎤 Konu: ${w.konu ? `${w.konu.title} (${nameOf(w.konu.presenterId)})` : "Open — volunteer 👇"}`);
+    lines.push(`💬 Sohbet: ${w.sohbet?.title || "—"}`);
+    lines.push(`🎤 Sunum: ${w.konu ? `${w.konu.title} (${nameOf(w.konu.presenterId)})` : "Open — volunteer 👇"}`);
     lines.push(`✅ Geliyorum: ${yes} · tap to answer 👇`);
   }
   lines.push(location.origin);

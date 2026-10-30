@@ -146,6 +146,23 @@ t("initial yemek sırası seeds once, matches existing names, never overwrites",
   assert.deepEqual(s.settings.hostRota, [f], "not re-seeded");
 });
 
+t("fixed roles: only Ihsan edits hadis, only Harun edits sohbet, only presenter edits sunum", () => {
+  const s = emptyState();
+  applyAction(s, { type: "init", tz: TZ }, FRI);
+  advance(s, FRI); // seeds rota + roles
+  const id = (n) => s.members.find((m) => m.name === n).id;
+  assert.throws(() => act(s, FRI, { type: "setHadis", weekId: WEEK, actor: id("Berkay"), text: "x" }), /Only Ihsan/);
+  act(s, FRI, { type: "setHadis", weekId: WEEK, actor: id("Ihsan"), text: "Hadis" });
+  assert.throws(() => act(s, FRI, { type: "setSohbet", weekId: WEEK, actor: id("Ihsan"), title: "x" }), /Only Harun/);
+  act(s, FRI, { type: "setSohbet", weekId: WEEK, actor: id("Harun"), title: "Tevekkül", notes: "..." });
+  assert.equal(s.weeks[WEEK].sohbet.title, "Tevekkül");
+  act(s, FRI, { type: "claimKonu", weekId: WEEK, actor: id("Enes"), title: "Sunum" });
+  assert.throws(() => act(s, FRI, { type: "editKonu", weekId: WEEK, actor: id("Celal"), title: "y" }), /Only the presenter/);
+  assert.throws(() => act(s, FRI, { type: "releaseKonu", weekId: WEEK, actor: id("Celal") }), /Only the presenter/);
+  act(s, FRI, { type: "editKonu", weekId: WEEK, actor: id("Enes"), title: "Sunum 2" });
+  assert.equal(s.weeks[WEEK].konu.title, "Sunum 2");
+});
+
 t("geliyorum / gelemiyorum", () => {
   const { s, ids } = group(2, FRI);
   act(s, FRI, { type: "rsvp", weekId: WEEK, actor: ids[0], answer: "yes" });
