@@ -304,19 +304,18 @@ function render() {
       <button class="avatar" data-a="profile" title="${esc(nameOf(me))} — profile & my notes" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
     </div></header>
     <main class="wrap">
-      ${DEMO ? demoBar() : installBar()}
+      ${DEMO ? demoBar() : ""}
       ${renderHostPrompt()}
       ${renderPrompt()}
       ${renderWeekTabs()}
-      ${renderWeekHead(w)}
-      ${w.cancelled ? `<div class="banner">${ic("ban")} No sohbet this week.</div>` : ""}
+      ${renderThursday(w)}
+      ${w.cancelled ? "" : renderKonu(w)}
       ${renderHadis(w)}
       ${renderSohbet(w)}
-      ${renderKonu(w)}
-      ${renderHost(w)}
-      ${w.id === S.currentWeekId && !w.cancelled ? renderRecapCard(w) : ""}
+      ${w.id === S.currentWeekId && !w.cancelled && w.id <= localToday() ? renderRecapCard(w) : ""}
       ${renderArchive()}
       <div class="foot">
+        ${DEMO ? "" : installBar()}
         <button class="btn outlined" data-a="feedback">${ic("chat")} Send feedback & ideas${(S.state.feedback || []).length ? ` <span class="muted small">· ${(S.state.feedback || []).length}</span>` : ""}</button>
         <p class="foot-note">Selam, ${esc(nameOf(me))} · Allah kabul etsin</p>
       </div>
@@ -369,50 +368,7 @@ function renderPrompt() {
       </div></section>`;
   }
 
-  // 2) Someone else is being asked
-  if (w.ask) {
-    const who = member(w.ask.memberId);
-    const remain = w.ask.askedAt + 24 * HOUR - t;
-    return `<section class="hero quiet"><div class="quiet-row">
-      ${avatar(w.ask.memberId, "sm")}
-      <div class="grow">No volunteer for sunum yet — asking <b>${esc(who?.name)}</b> · ${left(remain)} left</div>
-      <button type="button" class="btn text" data-a="personShare" data-id="${w.ask.memberId}" data-kind="sunum">${ic("chat")} Nudge</button>
-    </div>
-    ${canClaim(w) ? `<div class="row" style="margin-top:8px"><button class="btn outlined" data-a="claim" data-week="${w.id}">Actually, I'll take it</button></div>` : ""}
-    </section>`;
-  }
-
-  // 3) Past cutoff, queue exhausted → open to anyone
-  if (!beforeCutoff) {
-    return `<section class="hero">
-      <div class="deco">${ic("mic")}</div>
-      <h2>This week's sunum is still open</h2>
-      <p>Everyone in the queue has passed. Anyone can step in — even a short reflection helps.</p>
-      <button class="btn filled lg" data-a="claim" data-week="${w.id}">${ic("mic")} I'll take it</button>
-    </section>`;
-  }
-
-  // 4) In cooldown → gentle note, no prompt
-  if (cooldown(me) > 0) {
-    const n = cooldown(me);
-    return `<section class="hero quiet"><div class="quiet-row">
-      <span class="avatar sm" style="background:var(--primary-container);color:var(--on-primary-container)">${ic("check")}</span>
-      <div class="grow">${upcomingTalk(me)
-        ? `<b>You're presenting on ${esc(shortDate(upcomingTalk(me).id))}</b> — jazakallah! Tap that week above to add or update your prep notes.`
-        : `<b>You presented recently</b> — jazakallah! Your turn opens again after ${n} more ${n === 1 ? "person" : "people"}.`}</div>
-    </div></section>`;
-  }
-
-  // 5) The main volunteer prompt
-  const ms = meta.cutoff - t;
-  const countdown = ms < DAY ? `Last day to volunteer · ${left(ms)} left` : `${left(ms)} left to volunteer`;
-  return `<section class="hero">
-    <div class="deco">${ic("mic")}</div>
-    <span class="chip">${ic("clock")} ${countdown}</span>
-    <h2>Sunum for ${esc(shortDate(w.id))} is open — want to take it?</h2>
-    <p>Share something for 10–15 min: an Esma like Huvallahüllezi, an ayet, Miraç, or a day-to-day iman topic.</p>
-    <button class="btn filled lg" data-a="claim" data-week="${w.id}">${ic("mic")} I'll take it</button>
-  </section>`;
+  return ""; // everything else lives in the Thursday card
 }
 
 function renderWeekTabs() {
@@ -430,18 +386,84 @@ function renderWeekTabs() {
   }).join("")}</nav>`;
 }
 
-function renderWeekHead(w) {
-  const place = weekPlace(w);
-  return `<div class="week-head"><div style="flex:1;min-width:0">
-      <h1>${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}</h1>
-      <div class="meta">${w.cancelled ? "" : detailsReady(w) ? `
-        <span>${ic("clock")}${esc(fmtTime(weekTime(w)))}</span>
-        ${place ? `<a class="meta-link" href="${gmaps(place)}" target="_blank" rel="noopener">${ic("pin")}${esc(place)}</a>` : ""}`
-        : `<span>${ic("clock")}Time & place once the host confirms</span>`}
-      </div></div>
-    <div class="wh-actions"><button class="icon-btn" data-a="share" title="Share this week" aria-label="Share this week">${ic("share")}</button>
-    <button class="btn text small" data-a="cancel">${w.cancelled ? "Restore week" : "Cancel week"}</button></div>
-  </div>`;
+/** v1.2 — one card with what people need most: when, where, host, who's coming, sunum. */
+function renderThursday(w) {
+  const h = hostOf(w), place = weekPlace(w), ready = detailsReady(w);
+  const r = rsvpOf(w);
+  const yes = Object.keys(r).filter((id) => r[id] === "yes" && member(id));
+  const no = Object.keys(r).filter((id) => r[id] === "no" && member(id));
+  const mine = r[me];
+  const skipped = (w.hostSkips || []).filter((x) => member(x));
+  const admin = !roleId("feedback") || roleId("feedback") === me;
+  const canHostEdit = admin || h?.id === me;
+  const isCur = w.id === S.currentWeekId, today = w.id === localToday();
+  const kicker = today ? "Today" : isCur ? "This week" : "Coming up";
+  const hostSub = !h ? "" : h.confirmed ? `<span class="ok">${ic("check")} Confirmed</span>`
+    : `Waiting to confirm${skipped.length ? ` · covering for ${esc(skipped.map(nameOf).join(", "))}` : h.changed ? " · swapped" : ""}`;
+  const hostAct = !h ? "" : !h.confirmed && h.id !== me
+    ? `<button type="button" class="btn text small" data-a="personShare" data-id="${h.id}" data-kind="host">${ic("chat")} Remind</button>`
+    : `<button class="btn text small" data-a="rota">Sıra</button>`;
+  return `<section class="card thu">
+    <div class="thu-h">
+      <div class="grow"><div class="kicker">${kicker}</div>
+        <h1>${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}</h1></div>
+      <button class="icon-btn" data-a="share" title="Share this week" aria-label="Share this week">${ic("share")}</button>
+      ${canHostEdit ? `<button class="icon-btn" data-a="host" title="Host & details" aria-label="Change host or details">${ic("edit")}</button>` : ""}
+    </div>
+    ${w.cancelled ? `<div class="banner" style="margin:0 0 4px">${ic("ban")} No sohbet this week.</div>
+        <button class="btn text small" data-a="cancel">Restore week</button>` : `
+    <div class="thu-rows">
+      <div class="thu-row">${ic("clock")}<div class="grow">${ready ? `<b>${esc(fmtTime(weekTime(w)))}</b>` : `<span class="muted">Time & place once the host confirms</span>`}</div></div>
+      ${ready && place ? `<div class="thu-row">${ic("pin")}<div class="grow"><a class="addr-link" href="${gmaps(place)}" target="_blank" rel="noopener">${esc(place)}</a>
+        <div class="row maps"><a class="btn outlined small" href="${gmaps(place)}" target="_blank" rel="noopener">Google Maps</a><a class="btn outlined small" href="${amaps(place)}" target="_blank" rel="noopener">Apple Maps</a></div></div></div>` : ""}
+      <div class="thu-row">${ic("home")}<div class="grow">${h
+        ? `<b>${esc(nameOf(h.id))}</b>${h.id === me ? ' <span class="muted small">(you)</span>' : ""}<div class="sub">${hostSub}</div>`
+        : `<span class="muted">${(S.state.settings.hostRota || []).length ? "No host yet — everyone passed" : "No host yet"}</span>`}</div>
+        ${h ? hostAct : (S.state.settings.hostRota || []).length
+          ? `<button class="btn tonal small" data-a="hostYes">I can host</button>`
+          : `<button class="btn tonal small" data-a="rotaEdit">Set sırası</button>`}</div>
+      ${h?.id === me && !h.confirmed && !isCur ? `<div class="row" style="margin:0 0 4px 36px"><button class="btn tonal small" data-a="hostYes">${ic("check")} Confirm</button><button class="btn text small" data-a="hostSkip">Skip this week</button></div>` : ""}
+      ${h?.id === me && h.confirmed ? `<button class="btn text small" data-a="hostYes" style="margin:-4px 0 4px 28px">${ic("edit")} Update address & notes</button>` : ""}
+      ${w.hostNotes && ready ? `<div class="notes-box thu-notes"><div class="lbl">Notes from host</div><div class="notes">${esc(w.hostNotes)}</div></div>` : ""}
+      ${sunumRow(w)}
+    </div>
+    <div class="rsvp" data-tour="rsvp">
+      <div class="seg2" role="group" aria-label="Attendance">
+        <button class="${mine === "yes" ? "on" : ""}" data-a="rsvp" data-v="yes" aria-pressed="${mine === "yes"}">${mine === "yes" ? ic("check") : ""}Geliyorum <b>${yes.length}</b></button>
+        <button class="${mine === "no" ? "on no" : ""}" data-a="rsvp" data-v="no" aria-pressed="${mine === "no"}">${mine === "no" ? ic("check") : ""}Gelemiyorum <b>${no.length}</b></button>
+      </div>
+      <button type="button" class="attend-link" data-a="attendance" data-week="${w.id}">
+        ${yes.length ? `<span class="faces">${yes.slice(0, 10).map((id) => `<span title="${esc(nameOf(id))}">${avatar(id, "sm")}</span>`).join("")}</span>
+          <span class="small">${esc(yes.slice(0, 3).map(nameOf).join(", "))}${yes.length > 3 ? ` +${yes.length - 3}` : ""}</span>` : `<span class="small muted">No one yet</span>`}
+        <span class="small attend-more">See who ›</span></button>
+    </div>
+    ${admin ? `<div class="thu-foot"><button class="btn text small" data-a="cancel">Cancel this week</button></div>` : ""}`}
+  </section>`;
+}
+
+/** The sunum line inside the Thursday card. */
+function sunumRow(w) {
+  const k = w.konu, t = now(), meta = S.weekMeta[w.id];
+  let body, act = "";
+  if (k) {
+    body = `<b>${esc(k.title)}</b><div class="sub">Sunum · ${esc(nameOf(k.presenterId))}${k.presenterId === me ? " (you)" : ""}</div>`;
+  } else if (w.ask) {
+    const remain = w.ask.askedAt + 24 * HOUR - t;
+    body = w.ask.memberId === me
+      ? `<b>Sunum</b><div class="sub">You're being asked · ${left(remain)} to answer</div>`
+      : `<b>Sunum open</b><div class="sub">Asking ${esc(nameOf(w.ask.memberId))} · ${left(remain)} left</div>`;
+    act = w.ask.memberId === me ? "" : canClaim(w)
+      ? `<button class="btn tonal small" data-a="claim" data-week="${w.id}">Take it</button>`
+      : `<button type="button" class="btn text small" data-a="personShare" data-id="${w.ask.memberId}" data-kind="sunum">${ic("chat")} Nudge</button>`;
+  } else {
+    const ms = meta ? meta.cutoff - t : 0;
+    const when = w.id !== S.currentWeekId ? "Open for a volunteer" : ms > 0 ? (ms < DAY ? `Last day · ${left(ms)} left` : `${left(ms)} left to volunteer`) : "Still open — anyone can step in";
+    const cd = !canClaim(w) && cooldown(me) > 0
+      ? (upcomingTalk(me) ? ` · you're on ${esc(shortDate(upcomingTalk(me).id))}` : ` · your turn after ${cooldown(me)} more`) : "";
+    body = `<b>Sunum open</b><div class="sub">${when}${cd}</div>`;
+    act = canClaim(w) ? `<button class="btn filled small" data-a="claim" data-week="${w.id}">${ic("mic")} Take it</button>` : "";
+  }
+  return `<div class="thu-row" data-tour="sunum">${ic("mic")}<div class="grow">${body}</div>${act}</div>`;
 }
 
 function clampBlock(key, text) {
@@ -462,7 +484,7 @@ function renderHadis(w) {
       ${h.source ? `<div class="src">— ${esc(h.source)}</div>` : ""}
       ${h.notes ? `<div class="notes-box"><div class="lbl">Discussion notes</div>${clampBlock("h" + w.id, h.notes)}
         ${owner === me ? `<button class="btn text small move-priv" data-a="toPrivate" data-part="hadis" data-week="${w.id}">${ic("lock")} Move to My notes</button>` : ""}</div>` : ""}`
-    : edit ? `${sampleHadis()}<button class="btn tonal" data-a="hadis">${ic("plus")} Add hadis</button>`
+    : edit ? `<div class="row"><button class="btn tonal" data-a="hadis">${ic("plus")} Add hadis</button><button class="btn text small" data-a="example" data-k="hadis">See an example</button></div>`
     : `<p class="empty" style="margin:0">${esc(nameOf(owner))} will post this week's hadis here.</p>`}
     ${owner === me ? privateBox(w, "hadis") : ""}
   </section>`;
@@ -479,7 +501,7 @@ function renderSohbet(w) {
       ${so.notes ? `<div class="notes-box"><div class="lbl">Notes · skim before sohbet</div>${clampBlock("s" + w.id, so.notes)}
         ${owner === me ? `<button class="btn text small move-priv" data-a="toPrivate" data-part="sohbet" data-week="${w.id}">${ic("lock")} Move to My notes</button>` : ""}</div>` : ""}
       ${so.link ? `<div class="actions"><a class="btn outlined" href="${esc(so.link)}" target="_blank" rel="noopener">${ic("link")} Open link</a></div>` : ""}`
-    : edit ? `${sampleSohbet()}<button class="btn tonal" data-a="sohbet">${ic("plus")} Add sohbet topic</button>`
+    : edit ? `<div class="row"><button class="btn tonal" data-a="sohbet">${ic("plus")} Add sohbet topic</button><button class="btn text small" data-a="example" data-k="sohbet">See an example</button></div>`
     : `<p class="empty" style="margin:0">${esc(nameOf(owner))} will share the sohbet topic and notes here before Thursday.</p>`}
     ${owner === me ? privateBox(w, "sohbet") : ""}
   </section>`;
@@ -553,18 +575,9 @@ ${instr("ayetler, hadisler, ana noktalar, sorular — herkes sohbetten önce gö
 
 function renderKonu(w) {
   const k = w.konu;
-  if (!k) {
-    const asking = w.ask ? (w.ask.memberId === me ? "The backup queue is asking you this week." : `Backup queue is asking ${esc(nameOf(w.ask.memberId))}.`) : "Open — waiting for a volunteer.";
-    return `<section class="card" data-tour="sunum">
-      <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Sunum</h3><span class="owner">rotating</span></div>
-      <p class="empty">${w.cancelled ? "—" : asking}</p>
-      ${w.cancelled ? "" : sampleKonu()}
-      ${canClaim(w) ? `<button class="btn tonal" data-a="claim" data-week="${w.id}">${ic("mic")} ${w.ask?.memberId === me ? "Yes, I'll present" : `Take ${fmtDate(w.id, { month: "short", day: "numeric" })}`}</button>` : ""}
-      ${!w.cancelled && !canClaim(w) && cooldown(me) > 0 ? `<p class="small muted" style="margin:0">${upcomingTalk(me) ? `You're presenting on ${esc(shortDate(upcomingTalk(me).id))} — one at a time 🙂` : `You're on a short break — ${cooldown(me)} more ${cooldown(me) === 1 ? "person" : "people"} to go.`}</p>` : ""}
-    </section>`;
-  }
+  if (!k) return "";
   const mine = k.presenterId === me;
-  return `<section class="card" data-tour="sunum">
+  return `<section class="card">
     <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Sunum</h3>
       ${mine ? `<button class="icon-btn" data-a="editKonu" aria-label="Edit topic">${ic("edit")}</button>` : ""}</div>
     <div class="person">${avatar(k.presenterId, "lg")}
@@ -580,48 +593,6 @@ function renderKonu(w) {
       ${!k.notes ? `<button class="btn tonal" data-a="editKonu">${ic("plus")} Add notes for everyone</button>` : ""}
       <span class="spacer"></span><button class="btn text danger" data-a="release">Give up slot</button></div>
       ${privateBox(w, "sunum")}` : ""}
-  </section>`;
-}
-
-function renderHost(w) {
-  const h = hostOf(w);
-  const place = weekPlace(w);
-  const r = rsvpOf(w);
-  const yes = Object.keys(r).filter((id) => r[id] === "yes" && member(id));
-  const no = Object.keys(r).filter((id) => r[id] === "no" && member(id));
-  const mine = r[me];
-  const skipped = (w.hostSkips || []).filter((x) => member(x));
-  const hm = h && member(h.id);
-  const nudge = h && !h.confirmed && h.id !== me
-    ? `<button type="button" class="btn text small" data-a="personShare" data-id="${h.id}" data-kind="host">${ic("chat")} Remind</button>` : "";
-  return `<section class="card">
-    <div class="card-h"><span class="badge">${ic("home")}</span><h3>Host & yemek</h3>
-      <button class="icon-btn" data-a="host" aria-label="Change host or details">${ic("edit")}</button></div>
-    ${h ? `<div class="person">${avatar(h.id, "lg")}<div style="flex:1;min-width:0"><div class="who">${esc(nameOf(h.id))}${h.id === me ? ' <span class="muted small">(you)</span>' : ""}</div>
-        <div class="sub">${h.confirmed ? `<span class="ok">${ic("check")} Confirmed</span>` : "Waiting to confirm"}${skipped.length ? ` · covering for ${esc(skipped.map(nameOf).join(", "))}` : h.changed ? " · swapped" : ""}</div></div>
-        ${nudge || `<button class="btn text" data-a="rota">Sıra</button>`}</div>
-        ${h.id === me && !h.confirmed && w.id !== S.currentWeekId ? `<div class="row" style="margin:-4px 0 12px"><button class="btn tonal" data-a="hostYes">${ic("check")} Confirm</button><button class="btn text" data-a="hostSkip">Skip this week</button></div>` : ""}
-        ${h.id === me && h.confirmed ? `<button class="btn text small" data-a="hostYes" style="margin:-6px 0 8px;padding-left:0">${ic("edit")} Update address & notes</button>` : ""}`
-      : (S.state.settings.hostRota || []).length
-        ? `<p class="empty">No host yet — everyone in the order passed.</p><button class="btn tonal" data-a="hostYes" style="margin-bottom:12px">${ic("home")} I can host</button>`
-        : `<p class="empty">No host yet. Set up the yemek sırası once and it fills every week.</p>
-           <button class="btn tonal" data-a="rotaEdit" style="margin-bottom:12px">${ic("plus")} Set yemek sırası</button>`}
-    ${h?.confirmed && !w.cancelled ? `<div class="addr">${ic("clock")}<div><div class="addr-t">${esc(fmtDate(w.id, { weekday: "long" }))}, ${esc(fmtTime(weekTime(w)))}</div></div></div>` : ""}
-    ${place && h?.confirmed ? `<div class="addr">${ic("pin")}<div style="flex:1;min-width:0"><div class="addr-t">${esc(place)}</div>
-        <div class="row" style="margin-top:8px"><a class="btn outlined small" href="${gmaps(place)}" target="_blank" rel="noopener">Google Maps</a><a class="btn outlined small" href="${amaps(place)}" target="_blank" rel="noopener">Apple Maps</a></div></div></div>` : ""}
-    ${w.hostNotes && h?.confirmed ? `<div class="notes-box" style="margin-top:0;margin-bottom:12px"><div class="lbl">Notes from host</div><div class="notes">${esc(w.hostNotes)}</div></div>` : ""}
-    ${w.cancelled ? "" : `<div class="rsvp" data-tour="rsvp">
-      <div class="section-lbl" style="margin-top:4px">Geliyor musun?</div>
-      <div class="seg2" role="group" aria-label="Attendance">
-        <button class="${mine === "yes" ? "on" : ""}" data-a="rsvp" data-v="yes" aria-pressed="${mine === "yes"}">${mine === "yes" ? ic("check") : ""}Geliyorum <b>${yes.length}</b></button>
-        <button class="${mine === "no" ? "on no" : ""}" data-a="rsvp" data-v="no" aria-pressed="${mine === "no"}">${mine === "no" ? ic("check") : ""}Gelemiyorum <b>${no.length}</b></button>
-      </div>
-      <button type="button" class="attend-link" data-a="attendance" data-week="${w.id}">
-        ${yes.length ? `<span class="faces">${yes.slice(0, 10).map((id) => `<span title="${esc(nameOf(id))}">${avatar(id, "sm")}</span>`).join("")}</span>
-          <span class="small">${esc(yes.slice(0, 3).map(nameOf).join(", "))}${yes.length > 3 ? ` +${yes.length - 3}` : ""}</span>` : `<span class="small muted">No one yet</span>`}
-        <span class="small attend-more">See who ›</span></button>
-      ${no.length ? `<div class="small muted" style="margin-top:6px">Gelemiyor: ${esc(no.map(nameOf).join(", "))}</div>` : ""}
-    </div>`}
   </section>`;
 }
 
@@ -721,7 +692,8 @@ function topicSheet(w, existing) {
     <label class="field"><span>Short summary <i>optional</i></span><textarea name="summary" maxlength="600" rows="2" placeholder="What's it about, in a sentence or two">${esc(k.summary)}</textarea></label>
     <label class="field"><span>Prep notes for everyone <i>optional</i></span><textarea name="notes" maxlength="8000" rows="5" placeholder="Ayetler, meali, key points, questions… people can skim this before sohbet.">${esc(k.notes)}</textarea>
       <div class="hint">You can add or update these later — a day before is great.</div></label>
-    <label class="field"><span>Link <i>optional</i></span><input type="url" name="link" value="${esc(k.link)}" placeholder="https://…" inputmode="url" /></label>`,
+    <label class="field"><span>Link <i>optional</i></span><input type="url" name="link" value="${esc(k.link)}" placeholder="https://…" inputmode="url" /></label>
+    ${existing ? "" : `<details class="ex"><summary>See an example</summary>${sampleKonu()}</details>`}`,
   }, async (f) => {
     if (!f.title?.trim()) { toast("Give your topic a title"); $("#sheet-root [name=title]")?.focus(); throw 0; }
     await act(existing ? "editKonu" : "claimKonu", { weekId: w.id, ...f });
@@ -1501,6 +1473,7 @@ async function statsSheet() {
       <div><b>${joined.length}<small>/${d.members.length}</small></b><span>members joined</span></div>
       <div><b>${d.totals.visitors}</b><span>devices total</span></div>
     </div>
+    <p class="small muted" style="margin:-4px 0 6px">🗄️ ${d.backups?.[0] ? `Weekly backup · last ${esc(new Date(d.backups[0].at).toLocaleDateString(undefined, { month: "short", day: "numeric" }))} · ${d.backupCount} kept` : "Weekly backup · first one runs within the hour"}</p>
     ${d.demoTotal ? `<p class="small muted" style="margin:-4px 0 6px">👀 Visitor preview: ${d.demoToday} today · ${d.demoTotal} total</p>` : ""}
     ${d.anonToday ? `<p class="small muted" style="margin:-4px 0 12px">${d.anonToday} visitor${d.anonToday > 1 ? "s" : ""} today opened the site but haven't picked a name yet.</p>` : ""}
     <div class="section-lbl">People per day · last 14 days</div>
@@ -1592,8 +1565,8 @@ function renderDemoWho() {
 /* ---------- quick tour (first sign-in; 5 short steps) ---------- */
 const TOUR = [
   { sel: () => [$(".weeks")], title: "Every Thursday", text: "🏠 is the host and ✓ means they confirmed. A filled ● means someone has volunteered for the sunum." },
-  { sel: () => [$("[data-tour=rsvp]")], title: "Coming?", text: "Vote so the host knows the count. Once the host confirms, the time and a tappable address show up here, with gate and parking notes." },
-  { sel: () => [$("[data-tour=sunum]")], title: "Sunum", text: "Each week one of us gives a short 10–15 min talk. Tap Take to volunteer and add your topic." },
+  { sel: () => [$("[data-tour=rsvp]")], title: "Coming?", text: "The top card has it all: time, place and host. Tap Geliyorum so the host knows the count." },
+  { sel: () => [$("[data-tour=sunum]")], title: "Sunum", text: "Each week one of us gives a short 10–15 min talk. Tap Take it to volunteer and add your topic." },
   { sel: () => [$("[data-tour=hadis]")], title: "Hadis & Sohbet", text: "Ihsan and Harun share the hadis and sohbet notes beforehand. Skim them to get more out of the sohbet." },
   { sel: () => [$(".topbar [data-a=chat]"), $(".topbar [data-a=notifs]"), $(".topbar [data-a=profile]")], title: "Stay in the loop", text: "💬 chat, 🔔 updates, and your profile with personal notes. That's it, hoş geldin!" },
 ];
@@ -1913,6 +1886,12 @@ document.addEventListener("click", async (e) => {
     case "decline":
       if (confirm("No problem — pass to the next person?")) { await act("answerAsk", { weekId: S.currentWeekId }).catch(() => {}); toast("Passed on — maybe next time!"); }
       break;
+    case "example": {
+      const k = el.dataset.k;
+      openSheet({ title: "Example", lead: "Just a sample to show the format. It's not saved anywhere.", action: null,
+        body: k === "hadis" ? sampleHadis() : k === "sohbet" ? sampleSohbet() : sampleKonu() });
+      break;
+    }
     case "hadis": hadisSheet(w); break;
     case "sohbet": sohbetSheet(w); break;
     case "host": hostSheet(w); break;

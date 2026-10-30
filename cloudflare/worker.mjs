@@ -3,6 +3,7 @@
 import { handleRequest, tick } from "../lib/server.mjs";
 import { handleArchive } from "../lib/archive-server.mjs";
 import { d1Store } from "../lib/d1-store.mjs";
+import { weeklyBackup } from "../lib/backup.mjs";
 
 const kvStore = (kv) => ({
   async load() {
@@ -27,5 +28,6 @@ export default {
   },
   async scheduled(_event, env, ctx) {
     ctx.waitUntil(tick(stateStore(env)));
+    ctx.waitUntil(weeklyBackup(env).catch((e) => console.error("backup failed", e)));
   },
 };

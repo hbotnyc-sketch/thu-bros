@@ -54,6 +54,7 @@ const devEnv = {
     async get(k, o) { const d = await kvData(); const v = d[k]; return v == null ? null : o?.type === "json" ? JSON.parse(v) : v; },
     async put(k, v) { const d = await kvData(); d[k] = v; await kvSave(d); },
     async delete(k) { const d = await kvData(); delete d[k]; await kvSave(d); },
+    async list({ prefix }) { const d = await kvData(); return { keys: Object.keys(d).filter((k) => k.startsWith(prefix)).map((name) => ({ name })), list_complete: true }; },
   },
   MEDIA: process.env.NO_MEDIA ? undefined : {
     async put(k, body) { const chunks = []; for await (const c of body) chunks.push(c); media.set(k, Buffer.concat(chunks)); },

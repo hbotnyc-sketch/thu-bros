@@ -709,3 +709,32 @@ body { font-size: 16px; }
 /* refresh: same small look, but a 40px tap area */
 .brand .refresh { position: relative; }
 .brand .refresh::after { content: ""; position: absolute; inset: -6px; }
+
+/* ---------- v1.2 · This Thursday card ---------- */
+.card.thu { padding: 18px 16px 14px; border: 1px solid var(--outline-var); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04); }
+.thu-h { display: flex; align-items: flex-start; gap: 4px; margin-bottom: 10px; }
+.thu-h .grow { flex: 1; min-width: 0; }
+.thu-h .kicker { font-size: 13px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; color: var(--primary); }
+.thu-h h1 { margin: 2px 0 0; font-size: 25px; font-weight: 500; letter-spacing: -0.4px; line-height: 1.15; }
+.thu-rows { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
+.thu-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; min-height: 44px; border-top: 1px solid var(--outline-var); }
+.thu-row:first-child { border-top: 0; }
+.thu-row > .ic { width: 20px; height: 20px; color: var(--on-surface-var); flex: none; align-self: flex-start; margin-top: 2px; }
+.thu-row .grow { flex: 1; min-width: 0; font-size: 16px; line-height: 1.35; }
+.thu-row .grow b { font-weight: 600; }
+.thu-row .sub { font-size: 14px; color: var(--on-surface-var); margin-top: 1px; }
+.thu-row .sub .ok { color: var(--primary); display: inline-flex; align-items: center; gap: 3px; font-weight: 500; }
+.thu-row .sub .ok .ic { width: 15px; height: 15px; }
+.thu-row .btn { flex: none; }
+.thu-row .addr-link { color: var(--on-surface); font-weight: 500; text-decoration: underline; text-decoration-color: var(--outline); text-underline-offset: 3px; }
+.thu-row .maps { margin-top: 8px; gap: 8px; }
+.thu-notes { margin: 2px 0 6px 32px; }
+.thu-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+.thu-foot .btn.text { color: var(--on-surface-var); font-size: 13px; height: 32px; }
+.card.thu .rsvp .seg2 { margin-top: 0; }
+.foot .install-bar { text-align: left; margin: 0 0 16px; }
+details.ex { margin-top: 6px; }
+details.ex > summary { cursor: pointer; color: var(--primary); font-weight: 500; padding: 8px 0; list-style: none; }
+details.ex > summary::-webkit-details-marker { display: none; }
+details.ex[open] > summary { margin-bottom: 8px; }
+@media (prefers-color-scheme: dark) { .card.thu { background: var(--surface-1); box-shadow: none; } }
