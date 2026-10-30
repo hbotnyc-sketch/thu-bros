@@ -1457,7 +1457,10 @@ document.addEventListener("click", async (e) => {
       toast("Saved"); profileSheet();
       break;
     case "switch":
-      if (confirm(`You're ${nameOf(me)}. Switch to a different name?`)) { me = null; store.set("sohbet.me", null); render(); }
+      if (confirm(`You're ${nameOf(me)}. Switch to a different name?`)) {
+        closeSheet(); me = null; store.set("sohbet.me", null);
+        chat.summary = { unread: {}, last: [] }; render(); window.scrollTo(0, 0);
+      }
       break;
     case "week": sel = el.dataset.id; render(); break;
     case "more": { const k = el.dataset.k; expanded.has(k) ? expanded.delete(k) : expanded.add(k); render(); break; }
