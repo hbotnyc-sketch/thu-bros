@@ -160,6 +160,15 @@ const hostOf = (w) => S.hosts?.[w.id] || null;
 const weekTime = (w) => w.customTime || S.state.settings.defaultTime;
 const weekPlace = (w) => w.place || member(hostOf(w)?.id)?.address || "";
 const rsvpOf = (w) => w.rsvp || {};
+const shortDate = (id) => fmtDate(id, { weekday: "short", month: "short", day: "numeric" });
+/** Upcoming week this member is presenting (if any) */
+const upcomingTalk = (id) => Object.values(S.state.weeks)
+  .filter((w) => w.id >= S.currentWeekId && !w.cancelled && w.konu?.presenterId === id).sort((a, b) => (a.id < b.id ? -1 : 1))[0] || null;
+function breakText(id) {
+  const up = upcomingTalk(id), n = cooldown(id);
+  if (up) return `Presenting ${shortDate(up.id)}`;
+  return n ? `Short break · ${n} to go` : "Available";
+}
 function waLink(phone, text) {
   const digits = String(phone || "").replace(/\D/g, "");
   return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
@@ -243,7 +252,9 @@ function renderPrompt() {
     const n = cooldown(me);
     return `<section class="hero quiet"><div class="quiet-row">
       <span class="avatar sm" style="background:var(--primary-container);color:var(--on-primary-container)">${ic("check")}</span>
-      <div class="grow"><b>You presented recently</b> — jazakallah! Your turn opens again after ${n} more ${n === 1 ? "person" : "people"}.</div>
+      <div class="grow">${upcomingTalk(me)
+        ? `<b>You're presenting on ${esc(shortDate(upcomingTalk(me).id))}</b> — jazakallah! Tap that week above to add or update your prep notes.`
+        : `<b>You presented recently</b> — jazakallah! Your turn opens again after ${n} more ${n === 1 ? "person" : "people"}.`}</div>
     </div></section>`;
   }
 
@@ -253,7 +264,7 @@ function renderPrompt() {
   return `<section class="hero">
     <div class="deco">${ic("mic")}</div>
     <span class="chip">${ic("clock")} ${countdown}</span>
-    <h2>This week's Konu is open — want to take it?</h2>
+    <h2>Konu for ${esc(shortDate(w.id))} is open — want to take it?</h2>
     <p>Share something for 10–15 min: an Esma like Huvallahüllezi, an ayet, Miraç, or a day-to-day iman topic.</p>
     <button class="btn filled lg" data-a="claim" data-week="${w.id}">${ic("mic")} I'll take it</button>
   </section>`;
@@ -263,7 +274,8 @@ function renderWeekTabs() {
   const ids = Object.keys(S.state.weeks).filter((id) => id >= S.currentWeekId).sort().slice(0, 4);
   return `<nav class="weeks" aria-label="Weeks">${ids.map((id) => {
     const w = S.state.weeks[id];
-    const label = id === S.currentWeekId ? "This week" : fmtDate(id, { weekday: "short" });
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: S.state.settings.tz || undefined });
+    const label = id === S.currentWeekId ? (id === today ? "Today" : "Next sohbet") : fmtDate(id, { weekday: "short" });
     const h = hostOf(w);
     const sub = w.cancelled ? `<span class="small muted">No sohbet</span>` :
       `<span class="dot ${w.hadis ? "full" : ""}" title="Hadis"></span><span class="dot ${w.konu ? "full" : ""}" title="Konu"></span>
@@ -332,7 +344,7 @@ function sampleKonu() {
 3) el-Melik, el-Kuddûs, es-Selâm
 Soru: Bu isimleri gün içinde nasıl hatırlarız?
 ${instr("hazırlık notları: ayet/meal, ana noktalar, sorular — herkes önceden göz atar")}</div></div>
-    <p class="instr block">(Bu bir örnektir. Konuyu alan kişi "Take this week"e basar → başlık + tür yeterli, notları sonradan ✎ ile ekleyebilir. Notları sohbetten bir gün önce eklemek idealdir. 10–15 dk yeter.)</p>
+    <p class="instr block">(Bu bir örnektir. Konuyu alan kişi "Take"e basar → başlık + tür yeterli, notları sonradan ✎ ile ekleyebilir. Notları sohbetten bir gün önce eklemek idealdir. 10–15 dk yeter.)</p>
   </div>`;
 }
 
@@ -344,8 +356,8 @@ function renderKonu(w) {
       <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Konu</h3></div>
       <p class="empty">${w.cancelled ? "—" : asking}</p>
       ${w.cancelled ? "" : sampleKonu()}
-      ${canClaim(w) ? `<button class="btn tonal" data-a="claim" data-week="${w.id}">${ic("mic")} ${w.ask?.memberId === me ? "Yes, I'll present" : w.id === S.currentWeekId ? "Take this week" : "Take this one"}</button>` : ""}
-      ${!w.cancelled && !canClaim(w) && cooldown(me) > 0 ? `<p class="small muted" style="margin:0">You're on a short break — ${cooldown(me)} more ${cooldown(me) === 1 ? "person" : "people"} to go.</p>` : ""}
+      ${canClaim(w) ? `<button class="btn tonal" data-a="claim" data-week="${w.id}">${ic("mic")} ${w.ask?.memberId === me ? "Yes, I'll present" : `Take ${fmtDate(w.id, { month: "short", day: "numeric" })}`}</button>` : ""}
+      ${!w.cancelled && !canClaim(w) && cooldown(me) > 0 ? `<p class="small muted" style="margin:0">${upcomingTalk(me) ? `You're presenting on ${esc(shortDate(upcomingTalk(me).id))} — one at a time 🙂` : `You're on a short break — ${cooldown(me)} more ${cooldown(me) === 1 ? "person" : "people"} to go.`}</p>` : ""}
     </section>`;
   }
   const mine = k.presenterId === me;
@@ -432,7 +444,7 @@ function topicSheet(w, existing) {
   const k = existing || {};
   const isAsk = w.ask?.memberId === me;
   openSheet({
-    title: existing ? "Edit topic" : isAsk ? "What will you share?" : "Take this week's Konu",
+    title: existing ? "Edit topic" : isAsk ? "What will you share?" : `Konu · ${fmtDate(w.id, { month: "short", day: "numeric" })}`,
     lead: `${weekLabel(w)} · a title is enough to start.`,
     action: existing ? "Save" : "Take it",
     body: `
@@ -553,7 +565,7 @@ function membersSheet() {
       const m = member(id), c = cooldown(id);
       return `<li><span class="pos">${i + 1}</span>${avatar(id, "sm")}
         <div class="grow"><div class="nm">${esc(m.name)}${id === me ? ' <span class="muted small">(you)</span>' : ""}</div>
-          <div class="small muted">${c ? `Break · ${c} to go` : "Available"}</div></div>
+          <div class="small muted">${esc(breakText(id))}</div></div>
         <div class="mem-actions">
         <button type="button" class="icon-btn" data-a="mup" data-id="${id}" aria-label="Move ${esc(m.name)} up" ${i === 0 ? "disabled" : ""}>${ic("up")}</button>
         <button type="button" class="icon-btn" data-a="mdown" data-id="${id}" aria-label="Move ${esc(m.name)} down" ${i === q.length - 1 ? "disabled" : ""}>${ic("down")}</button>
