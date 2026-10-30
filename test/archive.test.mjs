@@ -9,7 +9,9 @@ const store = { async load() { return { data: state, etag: null }; }, async save
 const env = {
   SOHBET: { async get(k, o) { const v = kv.get(k); return v == null ? null : o?.type === "json" ? JSON.parse(v) : v; }, async put(k, v) { kv.set(k, v); }, async delete(k) { kv.delete(k); } },
   MEDIA: { async put(k, b) { r2.set(k, b); }, async get(k) { return r2.has(k) ? { body: "x" } : null; }, async list({ prefix }) { return { objects: [...r2.keys()].filter((k) => k.startsWith(prefix)).map((key) => ({ key, size: 1 })) }; } },
-  AI: { async run(model, input) { assert.equal(model, "@cf/openai/whisper-large-v3-turbo"); assert.equal(input.language, "tr"); return { text: "Bismillah, bugün tevekkülü konuşacağız." }; } },
+  AI: { async run(model, input) {
+    if (model === "@cf/openai/gpt-oss-120b") { assert.equal(input.messages[0].role, "system"); return { choices: [{ message: { content: '{"title":"Ücretsiz özet","summary":"Özet.","hadis":"","sohbet":"• Nokta","sunum":"","questions":"","tags":["tevekkül"]}' } }] }; }
+    assert.equal(model, "@cf/openai/whisper-large-v3-turbo"); assert.equal(input.language, "tr"); return { text: "Bismillah, bugün tevekkülü konuşacağız." }; } },
 };
 const call = async (path, init) => { const r = await handleArchive(new Request("https://x" + path, init), env, store); return { status: r.status, body: await r.json() }; };
 let pass = 0; const t = async (n, f) => { await f(); pass++; console.log("✓", n); };
@@ -27,7 +29,7 @@ await t("running transcript saved and returned with audio list", async () => {
   const r = await call(`/api/recap?week=${wk}`);
   assert.equal(r.body.transcript, "part one\npart two");
   assert.equal(r.body.audio.length, 1);
-  assert.equal(r.body.aiEnabled, false);
+  assert.equal(r.body.aiEnabled, true, "free Workers AI counts as enabled");
 });
 await t("saving notes writes full recap + meta in shared state", async () => {
   const r = await call(`/api/recap?week=${wk}`, { method: "POST", body: JSON.stringify({ actor: me, title: "Tevekkül", summary: "Güzel bir sohbet.", tags: ["tevekkül", " sabır "], attendees: [me], transcript: "full text" }) });
@@ -38,9 +40,9 @@ await t("saving notes writes full recap + meta in shared state", async () => {
   assert.equal(JSON.parse(kv.get(`recap:${wk}`)).summary, "Güzel bir sohbet.");
   assert.equal(kv.get(`tx:${wk}`), "full text");
 });
-await t("summarize without a key explains what's missing", async () => {
+await t("summarize without any key uses free Workers AI (gpt-oss-120b)", async () => {
   const r = await call(`/api/summarize`, { method: "POST", body: JSON.stringify({ transcript: "x".repeat(100) }) });
-  assert.equal(r.status, 501); assert.match(r.body.error, /ANTHROPIC_API_KEY/);
+  assert.equal(r.status, 200); assert.equal(r.body.draft.title, "Ücretsiz özet"); assert.deepEqual(r.body.draft.tags, ["tevekkül"]);
 });
 await t("summarize calls Claude and parses the JSON reply", async () => {
   const orig = globalThis.fetch;

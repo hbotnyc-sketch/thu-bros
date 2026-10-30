@@ -843,11 +843,12 @@ function recapSheet(id, preset = {}) {
         <textarea name="transcript" id="rc-tx" rows="5" placeholder="…or paste a transcript here (e.g. from Voice Memos)">${esc(transcript)}</textarea>
         <div class="row" style="margin-top:8px;justify-content:space-between">
           <span class="small muted" id="rc-wc">${transcript ? wordCount(transcript).toLocaleString() + " words" : ""}</span>
-          <button type="button" class="btn tonal" data-a="summarize" data-week="${id}" ${d.aiEnabled ? "" : "disabled title=\"Claude isn't connected yet\""}>${ic("wand")} Summarize with Claude</button>
+          <button type="button" class="btn tonal" data-a="summarize" data-week="${id}" ${d.aiEnabled ? "" : "disabled"}>${ic("wand")} Summarize with AI</button>
         </div>
-        ${d.aiEnabled ? "" : `<p class="hint">Claude summaries turn on once the API key is added in Cloudflare.</p>`}
+        ${preset.audioUrl ? `<a class="btn outlined block" style="margin-top:10px" href="${preset.audioUrl}" download="thursday-bros-${id}.${preset.audioExt}">${ic("upload").replace('d="M12 16V4M7 9l5-5 5 5M4 20h16"', 'd="M12 4v12M7 11l5 5 5-5M4 20h16"')} Save recording to phone</a>
+          <p class="hint">The audio isn't stored on the site. Save it here if you want to keep it.</p>` : ""}
       </div>
-      <div class="section-lbl">2 · Notes ${preset.draft ? `<span class="chip on" style="margin-left:6px">Claude draft — please review</span>` : ""}</div>
+      <div class="section-lbl">2 · Notes ${preset.draft ? `<span class="chip on" style="margin-left:6px">AI draft — please review</span>` : ""}</div>
       <label class="field"><span>Title</span><input type="text" name="title" maxlength="140" value="${esc(r.title)}" placeholder="e.g. Tevekkül ve sabır" /></label>
       <label class="field"><span>Summary</span><textarea name="summary" rows="4" placeholder="A few sentences about the night">${esc(r.summary)}</textarea></label>
       <label class="field"><span>Hadis</span><textarea name="hadis" rows="3" placeholder="• What we discussed">${esc(r.hadis)}</textarea></label>
@@ -926,8 +927,8 @@ async function blobB64(blob) {
 
 /** Sends parts one at a time: keep audio (if storage is on) → transcribe → save running transcript. */
 class Pipeline {
-  constructor(week, startPart, baseText, onUpdate) {
-    Object.assign(this, { week, next: startPart, base: baseText.trim(), onUpdate, parts: [], done: 0, total: 0, failed: 0 });
+  constructor(week, startPart, baseText, onUpdate, keepAudio = false) {
+    Object.assign(this, { week, next: startPart, base: baseText.trim(), onUpdate, keepAudio, parts: [], done: 0, total: 0, failed: 0 });
     this.q = Promise.resolve();
   }
   add(blob) {
@@ -937,7 +938,7 @@ class Pipeline {
   }
   async process(i, k, blob) {
     try {
-      await fetch(`/api/audio?week=${this.week}&part=${i}`, { method: "PUT", body: blob }).catch(() => {});
+      if (this.keepAudio) await fetch(`/api/audio?week=${this.week}&part=${i}`, { method: "PUT", body: blob }).catch(() => {});
       const { text } = await apiX(`/api/transcribe?week=${this.week}&part=${i}`, { method: "POST", body: await blobB64(blob) });
       this.parts[k] = text;
     } catch (e) {
@@ -976,7 +977,7 @@ async function startRecording(id) {
   const pipe = new Pipeline(id, d.mediaEnabled ? d.audio.length : 0, d.transcript || "", (p) => {
     const tx = $("#rec-tx"); if (tx) { tx.textContent = p.parts.filter(Boolean).slice(-4).join("\n"); }
     const st = $("#rec-status"); if (st && activeRec) st.textContent = `${p.done} min transcribed${p.failed ? ` · ${p.failed} failed` : ""}`;
-  });
+  }, d.mediaEnabled);
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -999,6 +1000,16 @@ async function startRecording(id) {
       if (rec.len >= rec.rate * PART_SECONDS) rec.flush();
     };
     src.connect(proc); proc.connect(ctx.destination);
+    // A small compressed copy the recorder can save to their phone (not uploaded)
+    try {
+      const type = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((t) => window.MediaRecorder?.isTypeSupported?.(t));
+      if (type) {
+        rec.mr = new MediaRecorder(stream, { mimeType: type, audioBitsPerSecond: 48000 });
+        rec.mrChunks = []; rec.mrType = type;
+        rec.mr.ondataavailable = (e) => e.data.size && rec.mrChunks.push(e.data);
+        rec.mr.start(10000);
+      }
+    } catch {}
     rec.timer = setInterval(() => {
       const s = Math.floor((Date.now() - rec.started) / 1000), t = $("#rec-time");
       if (t) t.textContent = `${s >= 3600 ? Math.floor(s / 3600) + ":" : ""}${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -1015,13 +1026,20 @@ async function stopRecording() {
   const rec = activeRec; if (!rec) return closeSheet();
   activeRec = null;
   rec.flush(); clearInterval(rec.timer);
+  const saved = rec.mr && rec.mr.state !== "inactive" ? new Promise((res) => { rec.mr.onstop = res; rec.mr.stop(); }) : Promise.resolve();
+  await saved;
   rec.proc.disconnect(); rec.stream.getTracks().forEach((t) => t.stop()); rec.ctx.close().catch(() => {}); rec.wake?.release?.().catch(() => {});
   const st = $("#rec-status"); if (st) st.textContent = "Finishing the last parts…";
   const b = $(".rec-stop"); if (b) { b.disabled = true; b.innerHTML = `<span class="spinner sm"></span> Transcribing…`; }
   await rec.pipe.drain();
   if (rec.pipe.failed) toast(`${rec.pipe.failed} part(s) couldn't be transcribed${rec.pipe.lastError ? ": " + rec.pipe.lastError : ""}`);
   closeSheet();
-  recapSheet(rec.id, { transcript: rec.pipe.text(), keep: rec.keep });
+  let audioUrl = null, audioExt = "m4a";
+  if (rec.mrChunks?.length) {
+    const blob = new Blob(rec.mrChunks, { type: rec.mrType.split(";")[0] });
+    audioUrl = URL.createObjectURL(blob); audioExt = rec.mrType.includes("webm") ? "webm" : "m4a";
+  }
+  recapSheet(rec.id, { transcript: rec.pipe.text(), keep: rec.keep, audioUrl, audioExt });
 }
 
 async function uploadAudio(id, file) {
@@ -1046,7 +1064,7 @@ async function uploadAudio(id, file) {
       const bar = $("#up-bar"); if (bar) bar.style.width = Math.max(2, (p.done / total) * 100) + "%";
       const s = $("#up-status"); if (s) s.textContent = `Transcribed ${p.done} of ${total} minutes${p.failed ? ` · ${p.failed} failed` : ""}`;
       const tx = $("#rec-tx"); if (tx) tx.textContent = p.parts.filter(Boolean).slice(-3).join("\n");
-    });
+    }, d.mediaEnabled);
     $("#up-status").textContent = `0 of ${total} minutes`;
     for (let o = 0; o < ch.length; o += step) await pipe.add(wavBlob(downsample(ch.subarray(o, o + step), rate)));
     closeSheet();
