@@ -32,6 +32,7 @@ const ICONS = {
   food: '<path d="M3 11h18a9 9 0 0 1-18 0zM7 7c0-1.5 1-2 1-3.5M12 7c0-1.5 1-2 1-3.5M17 7c0-1.5 1-2 1-3.5"/>',
   trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
   ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/>',
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>',
   back: '<path d="m15 18-6-6 6-6"/>',
@@ -254,7 +255,8 @@ function render() {
   const w = W();
   $("#app").innerHTML = `
     <header class="topbar"><div class="topbar-in">
-      <div class="brand">${logo()}<span class="wordmark">Thursday Bros</span></div>
+      <div class="brand">${logo()}<span class="wordmark">Thursday Bros</span>
+        <button class="icon-btn refresh" data-a="reload" title="Refresh" aria-label="Refresh">${ic("refresh")}</button></div>
       <button class="icon-btn has-badge" data-a="chat" title="Chat" aria-label="Chat">${ic("chat")}${chatUnreadTotal() ? `<span class="badge-dot">${chatUnreadTotal()}</span>` : ""}</button>
       <button class="icon-btn has-badge" data-a="notifs" title="Notifications" aria-label="Notifications">${ic("bell")}${notifUnread() ? `<span class="badge-dot">${notifUnread()}</span>` : ""}</button>
       <button class="avatar" data-a="profile" title="${esc(nameOf(me))} — profile & my notes" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
@@ -1420,7 +1422,7 @@ const platform = () => {
 function installBar() {
   if (isStandalone()) return "";
   try { if (localStorage.getItem("tb.installDismissed")) return ""; } catch {}
-  return `<div class="install-bar" role="note">
+  return `<div class="install-bar" role="button" tabindex="0" data-a="installHow" aria-label="Add Thursday Bros to your home screen — how">
     <span class="ib-ic">${logo()}</span>
     <span class="grow"><b>Add Thursday Bros to your home screen</b><span class="small muted">Opens like an app, one tap away</span></span>
     <button class="btn filled small" data-a="installHow">${installEvt ? "Install" : "How?"}</button>
@@ -1639,6 +1641,7 @@ document.addEventListener("click", async (e) => {
     case "stats": statsSheet(); break;
     case "installHow": if (installEvt) { installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; render(); }); } else installSheet(); break;
     case "installNow": closeSheet(); installEvt?.prompt(); installEvt?.userChoice.finally(() => { installEvt = null; render(); }); break;
+    case "reload": el.classList.add("spin"); setTimeout(() => location.reload(), 150); break;
     case "installHide": try { localStorage.setItem("tb.installDismissed", "1"); } catch {} render(); toast("You can find it anytime in your Profile"); break;
     case "installSheet": installSheet(); break;
     case "notifGo": notifGo(el); break;
@@ -1838,6 +1841,30 @@ function showWelcomeHadith() {
   document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", k); } });
   document.body.appendChild(el);
 }
+
+/* ---------- pull down to refresh ---------- */
+(() => {
+  let y0 = null, pulled = 0, ind = null;
+  const reset = () => { y0 = null; pulled = 0; if (ind) { ind.style.opacity = 0; ind.style.transform = "translate(-50%, -40px)"; } };
+  document.addEventListener("touchstart", (e) => {
+    if ($("#sheet-root").innerHTML || window.scrollY > 0 || document.querySelector(".welcome")) return;
+    y0 = e.touches[0].clientY;
+    if (!ind) { ind = document.createElement("div"); ind.className = "ptr"; ind.innerHTML = ic("refresh"); document.body.appendChild(ind); }
+  }, { passive: true });
+  document.addEventListener("touchmove", (e) => {
+    if (y0 == null) return;
+    pulled = Math.max(0, e.touches[0].clientY - y0);
+    if (window.scrollY > 0) return reset();
+    const d = Math.min(pulled, 110);
+    ind.style.opacity = Math.min(1, d / 70);
+    ind.style.transform = `translate(-50%, ${d - 40}px) rotate(${d * 3}deg)`;
+    ind.classList.toggle("ready", pulled > 85);
+  }, { passive: true });
+  document.addEventListener("touchend", () => {
+    if (y0 != null && pulled > 85) { ind.classList.add("spin"); setTimeout(() => location.reload(), 200); return; }
+    reset();
+  });
+})();
 
 /* ---------- boot ---------- */
 (async () => {

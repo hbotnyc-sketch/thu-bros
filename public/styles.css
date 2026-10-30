@@ -578,3 +578,26 @@ button.avatar { position: relative; }
 .claim-q { font-size: 26px; font-weight: 500; margin: 6px 0 8px; letter-spacing: -0.3px; }
 .welcome.claim { background: color-mix(in srgb, var(--surface) 70%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); cursor: default; }
 .mem-actions .icon-btn .ic { width: 17px; height: 17px; }
+
+/* refresh */
+.brand .refresh { width: 30px; height: 30px; margin-left: -4px; border: 1px solid var(--outline-var); }
+.brand .refresh .ic { width: 15px; height: 15px; }
+.spin .ic, .ptr.spin .ic { animation: spin .7s linear infinite; }
+.ptr { position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; z-index: 40; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--surface); box-shadow: 0 4px 16px rgba(0,0,0,.15); display: grid; place-items: center; color: var(--on-surface-var);
+  opacity: 0; transform: translate(-50%, -40px); transition: opacity .15s; pointer-events: none; }
+.ptr.ready { color: var(--primary); }
+.ptr .ic { width: 20px; height: 20px; }
+.install-bar { cursor: pointer; }
+.install-bar:active { background: var(--surface-2); }
+@media (max-width: 360px) { .wordmark { font-size: 17px; } }
+.wordmark { white-space: nowrap; }
+@media (max-width: 360px) {
+  .topbar-in { padding: 0 6px 0 12px; gap: 0; }
+  .brand { gap: 7px; }
+  .brand svg.mark { width: 26px; height: 26px; }
+  .wordmark { font-size: 15.5px; letter-spacing: -0.5px; }
+  .brand .refresh { width: 28px; height: 28px; margin-left: -2px; }
+  .topbar .icon-btn:not(.refresh) { width: 36px; height: 36px; }
+  .topbar .avatar { width: 34px; height: 34px; }
+}
