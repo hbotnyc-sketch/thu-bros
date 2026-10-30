@@ -115,24 +115,34 @@ function toast(msg) {
 }
 
 let sheetSubmit = null;
-function openSheet(html, onSubmit) {
+/** Full-screen dialog on phones, centered card on desktop. The primary action lives in the
+ *  sticky top bar so floating badges, browser toolbars and the keyboard can never cover it. */
+function openSheet({ title, lead = "", body, action = "Save", danger = "" }, onSubmit) {
   sheetSubmit = onSubmit;
   $("#sheet-root").innerHTML = `<div class="scrim" data-a="close"></div>
-    <form class="sheet" role="dialog" aria-modal="true" novalidate><div class="grab"></div>${html}</form>`;
+    <form class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}" novalidate>
+      <div class="sheet-bar">
+        <button type="button" class="icon-btn" data-a="close" aria-label="Close">${ic("x")}</button>
+        <h2>${esc(title)}</h2>
+        ${action ? `<button type="submit" class="btn filled" data-primary>${action}</button>` : `<button type="button" class="btn text" data-a="close">Done</button>`}
+      </div>
+      <div class="sheet-body">${lead ? `<p class="lead">${lead}</p>` : ""}${body}
+        ${danger ? `<div class="danger-zone">${danger}</div>` : ""}</div>
+    </form>`;
+  document.body.classList.add("locked");
   const f = $("#sheet-root form");
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!sheetSubmit) return;
-    const btn = f.querySelector("[type=submit]");
+    const btn = f.querySelector("[data-primary]");
     if (btn) btn.disabled = true;
     try {
-      await sheetSubmit(Object.fromEntries(new FormData(f)), e.submitter);
-      closeSheet();
+      const keep = await sheetSubmit(Object.fromEntries(new FormData(f)), e.submitter);
+      if (keep !== "keep") closeSheet();
     } catch { if (btn) btn.disabled = false; }
   });
-  if (!f.querySelector(".mem")) setTimeout(() => f.querySelector("input:not([type=radio]):not([type=hidden]), textarea")?.focus(), 250);
 }
-function closeSheet() { $("#sheet-root").innerHTML = ""; sheetSubmit = null; }
+function closeSheet() { $("#sheet-root").innerHTML = ""; sheetSubmit = null; document.body.classList.remove("locked"); }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
 
 /* ---------- derived ---------- */
@@ -373,107 +383,115 @@ function renderWho() {
 }
 
 /* ---------- sheets ---------- */
+const weekLabel = (w) => fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" });
+
 function topicSheet(w, existing) {
   const k = existing || {};
   const isAsk = w.ask?.memberId === me;
-  openSheet(`
-    <h2>${existing ? "Edit topic" : isAsk ? "Jazakallah! What will you share?" : "Take this week's Konu"}</h2>
-    <p class="lead">${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })} · keep it simple — a title is enough to start.</p>
+  openSheet({
+    title: existing ? "Edit topic" : isAsk ? "What will you share?" : "Take this week's Konu",
+    lead: `${weekLabel(w)} · a title is enough to start.`,
+    action: existing ? "Save" : "Take it",
+    body: `
     <div class="field"><span>Type</span><div class="seg">${TYPES.map((t) => `<label><input type="radio" name="topicType" value="${t.id}" ${(k.topicType || "iman") === t.id ? "checked" : ""}/><span>${t.label}</span></label>`).join("")}</div></div>
-    <label class="field"><span>Title</span><input type="text" name="title" maxlength="140" required value="${esc(k.title)}" placeholder="e.g. Hüvallahüllezî — Haşr 22–24" /></label>
-    <label class="field"><span>Short summary (optional)</span><textarea name="summary" maxlength="600" rows="2" placeholder="What's it about, in a sentence or two">${esc(k.summary)}</textarea></label>
-    <label class="field"><span>Prep notes for everyone (optional)</span><textarea name="notes" maxlength="8000" rows="5" placeholder="Ayetler, meali, key points, questions… people can skim this before sohbet.">${esc(k.notes)}</textarea>
+    <label class="field"><span>Title</span><input type="text" name="title" maxlength="140" required value="${esc(k.title)}" placeholder="e.g. Hüvallahüllezî — Haşr 22–24" enterkeyhint="next" /></label>
+    <label class="field"><span>Short summary <i>optional</i></span><textarea name="summary" maxlength="600" rows="2" placeholder="What's it about, in a sentence or two">${esc(k.summary)}</textarea></label>
+    <label class="field"><span>Prep notes for everyone <i>optional</i></span><textarea name="notes" maxlength="8000" rows="5" placeholder="Ayetler, meali, key points, questions… people can skim this before sohbet.">${esc(k.notes)}</textarea>
       <div class="hint">You can add or update these later — a day before is great.</div></label>
-    <label class="field"><span>Link (optional)</span><input type="url" name="link" value="${esc(k.link)}" placeholder="https://…" /></label>
-    <div class="foot row end"><button type="button" class="btn text" data-a="close">Cancel</button><button type="submit" class="btn filled">${existing ? "Save" : "Take it"}</button></div>`,
-    async (f) => {
-      if (!f.title?.trim()) { toast("Give your topic a title"); throw 0; }
-      await act(existing ? "editKonu" : "claimKonu", { weekId: w.id, ...f });
-      toast(existing ? "Saved" : "It's yours — jazakallah!");
-    });
+    <label class="field"><span>Link <i>optional</i></span><input type="url" name="link" value="${esc(k.link)}" placeholder="https://…" inputmode="url" /></label>`,
+  }, async (f) => {
+    if (!f.title?.trim()) { toast("Give your topic a title"); $("#sheet-root [name=title]")?.focus(); throw 0; }
+    await act(existing ? "editKonu" : "claimKonu", { weekId: w.id, ...f });
+    toast(existing ? "Saved" : "It's yours — jazakallah!");
+  });
 }
 
 function hadisSheet(w) {
   const h = w.hadis || {};
-  openSheet(`
-    <h2>${w.hadis ? "Edit hadis" : "Add hadis"}</h2>
-    <p class="lead">${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}</p>
-    <label class="field"><span>Hadis-i şerif</span><textarea name="text" rows="5" maxlength="6000" placeholder="Hadis metni / meali">${esc(h.text)}</textarea></label>
+  openSheet({
+    title: w.hadis ? "Edit hadis" : "Add hadis",
+    lead: weekLabel(w),
+    body: `
+    <label class="field"><span>Hadis-i şerif</span><textarea name="text" rows="6" maxlength="6000" placeholder="Hadis metni / meali">${esc(h.text)}</textarea></label>
     <label class="field"><span>Source</span><input type="text" name="source" maxlength="300" value="${esc(h.source)}" placeholder="e.g. Buhârî, Îmân 1" /></label>
-    <label class="field"><span>Discussion notes (optional)</span><textarea name="notes" rows="4" maxlength="6000" placeholder="Points or questions to discuss">${esc(h.notes)}</textarea></label>
-    <div class="foot row end">${w.hadis ? `<button type="submit" class="btn text danger" name="_clear" value="1">Remove</button><span class="spacer"></span>` : ""}
-      <button type="button" class="btn text" data-a="close">Cancel</button><button type="submit" class="btn filled">Save</button></div>`,
-    async (f, submitter) => {
-      if (submitter?.name === "_clear") f.text = "";
-      else if (!f.text?.trim()) { toast("Add the hadis text"); throw 0; }
-      await act("setHadis", { weekId: w.id, ...f });
-      toast("Saved");
-    });
+    <label class="field"><span>Discussion notes <i>optional</i></span><textarea name="notes" rows="4" maxlength="6000" placeholder="Points or questions to discuss">${esc(h.notes)}</textarea></label>`,
+    danger: w.hadis ? `<button type="submit" class="btn text danger" name="_clear" value="1">${ic("trash")} Remove hadis</button>` : "",
+  }, async (f, submitter) => {
+    if (submitter?.name === "_clear") { if (!confirm("Remove this hadis?")) throw 0; f.text = ""; }
+    else if (!f.text?.trim()) { toast("Add the hadis text"); throw 0; }
+    await act("setHadis", { weekId: w.id, ...f });
+    toast(f.text ? "Saved" : "Removed");
+  });
 }
 
 function hostSheet(w) {
   const vols = w.hostVolunteers.filter((id) => member(id));
   const others = members().filter((m) => !vols.includes(m.id));
   const opt = (id) => `<option value="${id}" ${w.host === id ? "selected" : ""}>${esc(nameOf(id))}</option>`;
-  openSheet(`
-    <h2>Host & details</h2>
-    <p class="lead">${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}</p>
+  openSheet({
+    title: "Host & details",
+    lead: weekLabel(w),
+    body: `
     <label class="field"><span>Host</span><select name="hostId">
       <option value="">Not decided yet</option>
       ${vols.length ? `<optgroup label="Can host">${vols.map(opt).join("")}</optgroup>` : ""}
       <optgroup label="Everyone">${others.map((m) => opt(m.id)).join("")}</optgroup></select></label>
     <label class="field"><span>Place / address</span><input type="text" name="place" maxlength="200" value="${esc(w.place)}" placeholder="Address or 'Ahmet's place'" /></label>
     <label class="field"><span>Time</span><input type="time" name="time" value="${esc(w.time)}" /></label>
-    <label class="field"><span>Food & notes</span><textarea name="hostNotes" rows="3" maxlength="1000" placeholder="e.g. Dinner after sohbet, parking on the street">${esc(w.hostNotes)}</textarea></label>
-    <div class="foot row end"><button type="button" class="btn text" data-a="close">Cancel</button><button type="submit" class="btn filled">Save</button></div>`,
-    async (f) => { await act("setHost", { weekId: w.id, ...f }); toast("Saved"); });
+    <label class="field"><span>Food & notes</span><textarea name="hostNotes" rows="3" maxlength="1000" placeholder="e.g. Dinner after sohbet, parking on the street">${esc(w.hostNotes)}</textarea></label>`,
+  }, async (f) => { await act("setHost", { weekId: w.id, ...f }); toast("Saved"); });
 }
 
 function membersSheet() {
   const q = S.state.queue.filter((id) => member(id));
   const cd = S.state.settings.cooldown;
-  openSheet(`
-    <h2>Members & queue</h2>
-    <p class="lead">Order = the backup queue when nobody volunteers. People who present or pass move to the end.</p>
+  openSheet({
+    title: "Members & queue",
+    action: null,
+    lead: "Order is the backup queue when nobody volunteers. Whoever presents or passes moves to the end.",
+    body: `
     <ul class="list mem">${q.map((id, i) => {
       const m = member(id), c = cooldown(id);
       return `<li><span class="pos">${i + 1}</span>${avatar(id, "sm")}
-        <div class="grow"><div>${esc(m.name)}${id === me ? ' <span class="muted small">(you)</span>' : ""}</div>
-          <div class="small muted">${c ? `Break · ${c} to go` : "Available"}${m.phone ? " · " + esc(m.phone) : ""}</div></div>
-        <button type="button" class="icon-btn" data-a="mup" data-id="${id}" aria-label="Move up" ${i === 0 ? "disabled" : ""}>${ic("up")}</button>
-        <button type="button" class="icon-btn" data-a="mdown" data-id="${id}" aria-label="Move down" ${i === q.length - 1 ? "disabled" : ""}>${ic("down")}</button>
-        <button type="button" class="icon-btn" data-a="medit" data-id="${id}" aria-label="Edit">${ic("edit")}</button></li>`;
+        <div class="grow"><div class="nm">${esc(m.name)}${id === me ? ' <span class="muted small">(you)</span>' : ""}</div>
+          <div class="small muted">${c ? `Break · ${c} to go` : "Available"}</div></div>
+        <div class="mem-actions">
+        <button type="button" class="icon-btn" data-a="mup" data-id="${id}" aria-label="Move ${esc(m.name)} up" ${i === 0 ? "disabled" : ""}>${ic("up")}</button>
+        <button type="button" class="icon-btn" data-a="mdown" data-id="${id}" aria-label="Move ${esc(m.name)} down" ${i === q.length - 1 ? "disabled" : ""}>${ic("down")}</button>
+        <button type="button" class="icon-btn" data-a="medit" data-id="${id}" aria-label="Edit ${esc(m.name)}">${ic("edit")}</button></div></li>`;
     }).join("")}</ul>
     <div class="section-lbl">Add someone</div>
-    <div class="add-row"><input type="text" name="name" placeholder="Name" maxlength="40" aria-label="Name" /><input type="tel" name="phone" placeholder="WhatsApp (optional)" aria-label="WhatsApp" style="max-width:44%" /></div>
+    <div class="add-grid"><input type="text" name="name" placeholder="Name" maxlength="40" aria-label="Name" enterkeyhint="done" />
+      <input type="tel" name="phone" placeholder="WhatsApp (optional)" aria-label="WhatsApp number" />
+      <button type="submit" class="btn tonal">${ic("plus")} Add</button></div>
     <div class="section-lbl">Settings</div>
-    <div class="row" style="justify-content:space-between;margin-bottom:6px"><div style="flex:1;min-width:200px">After presenting, hide the prompt until this many others present<div class="small muted">Capped at group size − 1 (now ${S.effectiveCooldown})</div></div>
+    <div class="setting"><div>Break after presenting<div class="small muted">Prompt hides until this many others present (now ${S.effectiveCooldown} for this group size)</div></div>
       <div class="stepper"><button type="button" data-a="cd" data-d="-1" aria-label="Less">−</button><b>${cd}</b><button type="button" data-a="cd" data-d="1" aria-label="More">+</button></div></div>
-    <p class="small muted">Sohbet: Thursdays · backup queue starts Monday 9pm · 24h per person · timezone ${esc(S.state.settings.tz || "UTC")}</p>
-    <div class="foot row end"><button type="button" class="btn text" data-a="close">Done</button><button type="submit" class="btn filled">${ic("plus")} Add</button></div>`,
-    async (f) => {
-      if (!f.name?.trim()) { closeSheet(); return; }
-      await act("addMember", { name: f.name, phone: f.phone });
-      toast(`${f.name.trim()} added`);
-      setTimeout(membersSheet, 0);
-    });
+    <p class="small muted">Thursdays · backup queue starts Monday 9pm · 24h per person · ${esc(S.state.settings.tz || "UTC")}</p>`,
+  }, async (f) => {
+    if (!f.name?.trim()) { toast("Enter a name"); throw 0; }
+    await act("addMember", { name: f.name, phone: f.phone });
+    toast(`${f.name.trim()} added`);
+    setTimeout(membersSheet, 0);
+  });
 }
 
 function editMemberSheet(id) {
   const m = member(id);
-  openSheet(`
-    <h2>Edit ${esc(m.name)}</h2><p class="lead">&nbsp;</p>
+  openSheet({
+    title: `Edit ${m.name}`,
+    body: `
     <label class="field"><span>Name</span><input type="text" name="name" maxlength="40" value="${esc(m.name)}" /></label>
-    <label class="field"><span>WhatsApp number</span><input type="tel" name="phone" value="${esc(m.phone)}" placeholder="+1 555 123 4567" /></label>
-    <div class="foot row end"><button type="submit" class="btn text danger" name="_remove" value="1">Remove</button><span class="spacer"></span>
-      <button type="button" class="btn text" data-a="members">Back</button><button type="submit" class="btn filled">Save</button></div>`,
-    async (f, submitter) => {
-      if (submitter?.name === "_remove") {
-        if (!confirm(`Remove ${m.name} from the group?`)) throw 0;
-        await act("removeMember", { id });
-      } else await act("updateMember", { id, name: f.name, phone: f.phone });
-      setTimeout(membersSheet, 0);
-    });
+    <label class="field"><span>WhatsApp number</span><input type="tel" name="phone" value="${esc(m.phone)}" placeholder="+1 555 123 4567" />
+      <div class="hint">Used for the one-tap nudge when the queue asks them.</div></label>`,
+    danger: `<button type="submit" class="btn text danger" name="_remove" value="1">${ic("trash")} Remove from group</button>`,
+  }, async (f, submitter) => {
+    if (submitter?.name === "_remove") {
+      if (!confirm(`Remove ${m.name} from the group?`)) throw 0;
+      await act("removeMember", { id });
+    } else await act("updateMember", { id, name: f.name, phone: f.phone });
+    setTimeout(membersSheet, 0);
+  });
 }
 
 /* ---------- events ---------- */
