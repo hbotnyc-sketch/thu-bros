@@ -768,11 +768,52 @@ function confirmHostSheet(w) {
   });
 }
 
+
+/* ---------- push notifications (v1.2) ---------- */
+if (!DEMO && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+async function pushState() {
+  if (DEMO) return "unsupported";
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    return /iPhone|iPad/.test(navigator.userAgent) && !isStandalone() ? "install" : "unsupported";
+  }
+  if (Notification.permission === "denied") return "denied";
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if (Notification.permission === "granted" && await reg.pushManager.getSubscription()) return "on";
+  } catch {}
+  return "off";
+}
+const b64uToBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(s.length / 4) * 4, "=")), (c) => c.charCodeAt(0));
+async function enablePush() {
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") throw new Error("Notifications are blocked. Turn them on for Thursday Bros in Settings.");
+  const reg = await navigator.serviceWorker.ready;
+  const { key } = await (await fetch("/api/push/key")).json();
+  const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(key) });
+  const r = await fetch("/api/push/subscribe", { method: "POST", body: JSON.stringify({ actor: me, sub: sub.toJSON() }) });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Couldn't turn on notifications");
+}
+async function disablePush() {
+  const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+  if (sub) { await fetch("/api/push/unsubscribe", { method: "POST", body: JSON.stringify({ actor: me, endpoint: sub.endpoint }) }); await sub.unsubscribe(); }
+}
+function pushBlock(st) {
+  if (st === "unsupported") return "";
+  const body = {
+    install: `<p class="small muted" style="margin:0">On iPhone, notifications only work from the home screen app. Add Thursday Bros to your home screen, open it from there, then turn this on.</p>`,
+    denied: `<p class="small muted" style="margin:0">Notifications are blocked for this app. Turn them on in your phone's Settings → Notifications → Thursday Bros.</p>`,
+    off: `<button type="button" class="btn tonal block" data-a="pushOn">🔔 Turn on notifications</button>`,
+    on: `<div class="row"><button type="button" class="btn tonal" data-a="pushTest">Send me a test</button><button type="button" class="btn text" data-a="pushOff">Turn off</button></div>`,
+  }[st];
+  return `<div class="section-lbl" style="margin-top:6px">Notifications ${st === "on" ? '<span class="ok" style="font-weight:500">· on</span>' : ""}</div><div id="push-box" style="margin-bottom:6px">${body}</div>`;
+}
+
 async function profileSheet(focusWeek) {
   const m = member(me);
   let notes = {};
   try { notes = (await apiX(`/api/mynotes?actor=${me}`)).notes || {}; } catch (e) { toast(e.message); }
   const wk = focusWeek || S.currentWeekId;
+  const pst = await pushState();
   const past = Object.keys(notes).filter((id) => id !== wk).sort().reverse();
   const noteBox = (id, open) => `<details class="nb" data-week="${id}" ${open ? "open" : ""}>
       <summary><span class="d">${esc(fmtDate(id, { weekday: "short", month: "short", day: "numeric", year: id.slice(0, 4) !== String(new Date().getFullYear()) ? "numeric" : undefined }))}</span>
@@ -786,6 +827,7 @@ async function profileSheet(focusWeek) {
     <div class="prof">${avatar(me, "lg")}<div><div class="who" style="font-size:18px;font-weight:500">${esc(m.name)}</div>
       <div class="small muted">${m.phone ? esc(m.phone) : "No WhatsApp number"}${m.address ? " · " + esc(m.address) : ""}</div></div></div>
 
+    ${pushBlock(pst)}
     ${roleId("feedback") === me && !DEMO ? `<button type="button" class="btn filled block" data-a="stats" style="margin:6px 0 8px">📊 Site stats · who joined</button>
       <button type="button" class="btn tonal block" data-a="demoLink" style="margin:0 0 8px">👀 Visitor preview link (for other groups)</button>` : ""}
     ${roleId("feedback") === me ? `<button type="button" class="btn ${feedbackUnread() ? "filled" : "tonal"} block" data-a="feedback" style="margin:6px 0 4px">${ic("chat")} Feedback${feedbackUnread() ? ` · ${feedbackUnread()} new` : ""}</button>` : ""}
@@ -1886,6 +1928,20 @@ document.addEventListener("click", async (e) => {
     case "decline":
       if (confirm("No problem — pass to the next person?")) { await act("answerAsk", { weekId: S.currentWeekId }).catch(() => {}); toast("Passed on — maybe next time!"); }
       break;
+    case "pushOn": case "pushOff": case "pushTest": {
+      const box = $("#push-box");
+      try {
+        if (el.dataset.a === "pushOn") { el.disabled = true; await enablePush(); toast("Notifications on — sending a test…"); await fetch("/api/push/test", { method: "POST", body: JSON.stringify({ actor: me }) }); }
+        else if (el.dataset.a === "pushOff") { await disablePush(); toast("Notifications off"); }
+        else {
+          const r = await (await fetch("/api/push/test", { method: "POST", body: JSON.stringify({ actor: me }) })).json();
+          toast(r.sent ? "Sent — it should show up in a second" : r.devices ? `Couldn't deliver (${r.lastStatus || r.error || "error"})` : "No device signed up yet");
+        }
+      } catch (err) { toast(err.message); if (el) el.disabled = false; }
+      const st = await pushState();
+      if (box) box.parentElement.outerHTML = pushBlock(st);
+      break;
+    }
     case "example": {
       const k = el.dataset.k;
       openSheet({ title: "Example", lead: "Just a sample to show the format. It's not saved anywhere.", action: null,
