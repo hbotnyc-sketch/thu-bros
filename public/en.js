@@ -18,4 +18,5 @@ export const EN = {
   "Hz. Peygamber (s.a.v.) buyurdu:": "The Prophet ﷺ said:",
   "Selam, {n} · Allah kabul etsin": "Salam, {n} · May Allah accept it",
   "Esma-ül Hüsna": "Names of Allah", "Ayet / Sure": "Ayah / Surah", "Siyer / Event": "Seerah / Event", "Daily iman": "Daily faith",
+  "Your seat is saved every week. Two quick steps so the address, the hadis and your turn always find you.": "Your seat is saved every week. Two quick steps so the address, the hadith and your turn always find you.",
 };

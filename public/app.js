@@ -1,6 +1,6 @@
 // Thursday Bros — single-page client. No framework: state → render() → event delegation.
 import { HADITHS } from "./hadiths.js";
-import { T, P, LANG, loc, setLang } from "./i18n.js?v=14";
+import { T, P, LANG, loc, setLang } from "./i18n.js?v=15";
 import { applyAction as demoApply, advance as demoAdvance, view as demoView } from "./core.mjs";
 
 /* ---------- visitor preview mode (/?demo): live data, every action stays in this browser ---------- */
@@ -784,6 +784,7 @@ function langSwitch() {
 if (!DEMO && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 async function pushState() {
   if (DEMO) return "unsupported";
+  if (/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()) return "install"; // iOS: push only works from the home screen app
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
     return /iPhone|iPad/.test(navigator.userAgent) && !isStandalone() ? "install" : "unsupported";
   }
@@ -1645,10 +1646,12 @@ function startTour(force) {
   tourGo(0);
 }
 function endTour() {
+  const wasOpen = !!tourEls;
   store.set("tourDone", "1");
   tourEls?.remove(); tourEls = null; tourStep = -1;
   window.removeEventListener("resize", tourPlace);
   window.removeEventListener("scroll", tourPlace);
+  if (wasOpen) setTimeout(() => showFinale("tour"), 250);
 }
 function tourTargets(i) { return TOUR[i].sel().filter(Boolean); }
 function tourGo(i) {
@@ -2092,7 +2095,81 @@ function showError(msg) {
 }
 
 /* ---------- welcome hadith (once per visit) ---------- */
-function maybeTour() { if (me && member(me) && !tourDone()) setTimeout(() => startTour(), 350); }
+function maybeTour() {
+  if (!me || !member(me)) return;
+  if (!tourDone()) return setTimeout(() => startTour(), 350);
+  // First time opened from the home screen with notifications still off → finish step 2 there.
+  if (isStandalone() && !store.get("finaleApp")) setTimeout(() => showFinale("app"), 350);
+}
+
+/* ---------- finale: the two asks that keep people coming back ---------- */
+async function showFinale(from) {
+  if (DEMO || document.querySelector(".finale")) return;
+  if (from === "app") store.set("finaleApp", "1");
+  const plat = platform(), app = isStandalone();
+  const needInstall = !app && plat !== "desktop";
+  let pst = await pushState();
+  if (!needInstall && (pst === "on" || pst === "unsupported")) return; // nothing to ask
+  const el = document.createElement("div");
+  el.className = "welcome finale";
+  el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-labelledby", "fin-title");
+  const howInstall = () => installEvt
+    ? `<button type="button" class="btn filled small" data-fa="install">${T("Add it now")}</button>`
+    : plat === "ios-safari"
+      ? `<div class="fin-how">${T("Tap Share {icon} in Safari, then “Add to Home Screen”.", { icon: SHARE_IOS })}</div>
+         <button type="button" class="btn text small fin-link" data-fa="how">${T("Show me step by step")}</button>`
+      : plat === "ios-chrome"
+        ? `<div class="fin-how">${T("Works best in Safari. Copy the link, open Safari, paste it, then Share {icon} → “Add to Home Screen”.", { icon: SHARE_IOS })}</div>
+           <button type="button" class="btn tonal small" data-fa="copy">${T("Copy link for Safari")}</button>
+           <button type="button" class="btn text small fin-link" data-fa="how">${T("or add it from Chrome")}</button>`
+        : `<button type="button" class="btn tonal small" data-fa="how">${T("Show me how")}</button>`;
+  const step = (n, done, title, sub, action, locked) => `<li class="fin-step ${done ? "done" : ""} ${locked ? "locked" : ""}">
+      <span class="fin-n">${done ? ic("check") : n}</span>
+      <div class="grow"><b>${title}</b><div class="fin-sub">${sub}</div>${done || locked ? "" : action || ""}</div></li>`;
+  const draw = () => {
+    const s1 = needInstall ? step(1, false, T("Add it to your home screen"), T("Opens like an app, right next to WhatsApp."), howInstall()) : app && plat !== "desktop" ? step(1, true, T("Add it to your home screen"), T("Done. Welcome home.")) : "";
+    const n2 = s1 ? 2 : 1;
+    const s2 = pst === "unsupported" ? ""
+      : pst === "on" ? step(n2, true, T("Turn on notifications"), T("You're all set."))
+      : pst === "install" ? step(n2, false, T("Turn on notifications"), T("Next, open Thursday Bros from your home screen. We'll ask you right there."), "", true)
+      : pst === "denied" ? step(n2, false, T("Turn on notifications"), T("Notifications are blocked for this app. Turn them on in your phone's Settings → Notifications → Thursday Bros."), "", true)
+      : step(n2, false, T("Turn on notifications"), T("So the important stuff reaches you, even when the app is closed. No spam."), `<button type="button" class="btn filled small" data-fa="push">🔔 ${T("Turn on")}</button>`);
+    const allDone = (!needInstall) && pst === "on";
+    el.innerHTML = `<div class="welcome-card fin-card">
+      <div class="welcome-mark">${logo()}</div>
+      <div class="welcome-lbl">${T("One last thing")}</div>
+      <h2 id="fin-title" class="fin-title">${T("Never miss a Thursday")}</h2>
+      <p class="fin-lead">${T("Your seat is saved every week. Two quick steps so the address, the hadis and your turn always find you.")}</p>
+      <ol class="fin-steps">${s1}${s2}</ol>
+      <button type="button" class="btn ${allDone ? "filled lg block" : "text"} fin-close" data-fa="close">${allDone ? T("Bismillah, let's go") : T("Maybe later")}</button>
+    </div>`;
+  };
+  draw();
+  const close = () => { el.classList.add("out"); setTimeout(() => el.remove(), 260); };
+  el.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-fa]");
+    if (!b) { if (!e.target.closest(".fin-card")) close(); return; }
+    const a = b.dataset.fa;
+    if (a === "close") return close();
+    if (a === "how") { close(); return installSheet(); }
+    if (a === "install") { installEvt?.prompt(); installEvt?.userChoice.finally(() => { installEvt = null; close(); render(); }); return; }
+    if (a === "copy") {
+      try { await navigator.clipboard.writeText(location.origin); toast(T("Link copied. Paste it in Safari.")); }
+      catch { prompt(T("Copy this link and open it in Safari:"), location.origin); }
+      return;
+    }
+    if (a === "push") {
+      b.disabled = true;
+      try {
+        await enablePush();
+        fetch("/api/push/test", { method: "POST", body: JSON.stringify({ actor: me }) }).catch(() => {});
+      } catch (err) { toast(err.message); }
+      pst = await pushState(); draw();
+    }
+  });
+  document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", k); } });
+  document.body.appendChild(el);
+}
 function showWelcomeHadith() {
   try { if (sessionStorage.getItem("tb.welcomed")) return maybeTour(); sessionStorage.setItem("tb.welcomed", "1"); } catch {}
   // Shuffle bag: every hadith shows once before any repeats.
