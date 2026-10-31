@@ -1,6 +1,6 @@
 // Thursday Bros — single-page client. No framework: state → render() → event delegation.
 import { HADITHS } from "./hadiths.js";
-import { T, P, LANG, loc, setLang } from "./i18n.js?v=12";
+import { T, P, LANG, loc, setLang } from "./i18n.js?v=13";
 import { applyAction as demoApply, advance as demoAdvance, view as demoView } from "./core.mjs";
 
 /* ---------- visitor preview mode (/?demo): live data, every action stays in this browser ---------- */
@@ -86,7 +86,8 @@ const hue = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.cha
 const avatar = (id, cls = "") =>
   `<span class="avatar ${cls}" style="background:hsl(${hue(id)} 55% 86%);color:hsl(${hue(id)} 45% 22%)">${esc(initials(id))}</span>`;
 
-const fmtDate = (id, opts) => new Date(id + "T12:00:00Z").toLocaleDateString(loc, { timeZone: "UTC", ...opts });
+// Turkish: never shorten month names (Kasım, not Kas)
+const fmtDate = (id, opts) => new Date(id + "T12:00:00Z").toLocaleDateString(loc, { timeZone: "UTC", ...opts, ...(LANG === "tr" && opts?.month === "short" ? { month: "long" } : {}) });
 const fmtTime = (hhmm) => {
   if (!/^\d{1,2}:\d{2}$/.test(hhmm || "")) return hhmm || "";
   const [h, m] = hhmm.split(":").map(Number);
