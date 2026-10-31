@@ -70,7 +70,7 @@ export const TR = {
   "Send feedback & ideas": "Fikir ve geri bildirim gönder",
   "Add Thursday Bros to your home screen": "Thursday Bros'u ana ekrana ekle",
   "Opens like an app, one tap away": "Uygulama gibi açılır, tek dokunuş", "Install": "Yükle", "How?": "Nasıl?",
-  "Hold the card to keep reading · tap outside to continue": "Okumak için karta basılı tut · devam etmek için dışarı dokun",
+  "Tap the card for 3 more seconds · tap outside to continue": "3 saniye daha için karta dokun · devam etmek için dışarı dokun",
   "Tap outside to continue": "Devam etmek için dışarı dokun",
   // finale (after the tour)
   "One last thing": "Son bir şey",

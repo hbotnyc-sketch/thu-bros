@@ -1,6 +1,6 @@
 // Thursday Bros — single-page client. No framework: state → render() → event delegation.
 import { HADITHS } from "./hadiths.js";
-import { T, P, LANG, loc, setLang } from "./i18n.js?v=15";
+import { T, P, LANG, loc, setLang } from "./i18n.js?v=16";
 import { applyAction as demoApply, advance as demoAdvance, view as demoView } from "./core.mjs";
 
 /* ---------- visitor preview mode (/?demo): live data, every action stays in this browser ---------- */
@@ -1619,7 +1619,9 @@ function renderDemoWho() {
 
 /* ---------- quick tour (first sign-in; 5 short steps) ---------- */
 const TOUR = [
-  { sel: () => [$(".weeks")], title: "Every Thursday", text: "🏠 is the host and ✓ means they confirmed. A filled ● means someone has volunteered for the sunum." },
+  { sel: () => [$(".weeks")], title: "Every Thursday", text: `<span class="tl"><span class="wk-host">${ic("home")}</span> is the host, and <span class="tick">${ic("check")}</span> means they confirmed.</span>
+    <span class="tl"><span class="dot"></span> the sunum is still open</span>
+    <span class="tl"><span class="dot full"></span> someone took the sunum</span>` },
   { sel: () => [$("[data-tour=rsvp]")], title: "Coming?", text: "The top card has it all: time, place and host. Tap Geliyorum so the host knows the count." },
   { sel: () => [$("[data-tour=sunum]")], title: "Sunum", text: "Each week one of us gives a short 10–15 min talk. Tap Take it to volunteer and add your topic." },
   { sel: () => [$("[data-tour=hadis]")], title: "Hadis & Sohbet", text: "Ihsan and Harun share the hadis and sohbet notes beforehand. Skim them to get more out of the sohbet." },
@@ -2188,13 +2190,19 @@ function showWelcomeHadith() {
       <blockquote class="welcome-q">${esc(h.t)}</blockquote>
       <div class="welcome-src">${esc(h.s)}</div>
       <div class="welcome-timer"><span></span></div>
-      <div class="welcome-hint">${T("Hold the card to keep reading · tap outside to continue")}</div>
+      <div class="welcome-hint">${T("Tap the card for 3 more seconds · tap outside to continue")}</div>
     </div>`;
   let done = false;
   const close = () => { if (done) return; done = true; el.classList.add("out"); setTimeout(() => { el.remove(); maybeTour(); }, 300); };
   let timer = setTimeout(close, 3000);
-  const pin = () => { clearTimeout(timer); if (el.classList.contains("pinned")) return; el.classList.add("pinned"); el.querySelector(".welcome-hint").textContent = T("Tap outside to continue"); };
-  el.addEventListener("pointerdown", (e) => { if (e.target.closest(".welcome-card")) pin(); });
+  // Tap the card once → 3 more seconds (the bar restarts), then it closes.
+  const more = () => {
+    if (el.classList.contains("extended")) return;
+    el.classList.add("extended"); clearTimeout(timer); timer = setTimeout(close, 3000);
+    const bar = el.querySelector(".welcome-timer span"); bar.style.animation = "none"; void bar.offsetWidth; bar.style.animation = "";
+    el.querySelector(".welcome-hint").textContent = T("Tap outside to continue");
+  };
+  el.addEventListener("pointerdown", (e) => { if (e.target.closest(".welcome-card")) { e.preventDefault(); more(); } });
   el.addEventListener("click", (e) => { if (!e.target.closest(".welcome-card")) close(); });
   document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", k); } });
   document.body.appendChild(el);
