@@ -738,3 +738,10 @@ details.ex > summary { cursor: pointer; color: var(--primary); font-weight: 500;
 details.ex > summary::-webkit-details-marker { display: none; }
 details.ex[open] > summary { margin-bottom: 8px; }
 @media (prefers-color-scheme: dark) { .card.thu { background: var(--surface-1); box-shadow: none; } }
+
+/* language switch */
+.lang-sw { display: inline-flex; border: 1px solid var(--outline); border-radius: 999px; overflow: hidden; margin: 4px 0 10px; }
+.lang-sw button { font: inherit; font-size: 15px; font-weight: 500; padding: 8px 18px; min-height: 40px; background: transparent; color: var(--on-surface); border: 0; cursor: pointer; }
+.lang-sw button + button { border-left: 1px solid var(--outline); }
+.lang-sw button.on { background: var(--primary-container); color: var(--on-primary-container); }
+.who-page .lang-sw { margin: 22px auto 0; display: flex; width: max-content; }

@@ -50,6 +50,14 @@ delegation (`data-a="action"`), bottom sheets via `openSheet()`.
 - Don't touch real data; use the dev server for experiments.
 - Commit small, clear messages.
 
+## Language (EN | TR)
+`public/i18n.js` + `public/tr.js`. The English text in code is the key: wrap UI strings in `T("English text")`
+(`T("{n} left", { n })` for variables). Missing Turkish falls back to English. Default is EN ("as is"); users
+switch in the sign-in screen or Profile; `?lang=tr` previews. TR voice: warm friend in the group, "sen", short,
+Islamic phrases only where natural. Same word for the same thing (ev sahibi, sunum, sohbet, hadis, Geliyorum / Gelemiyorum, Sıra).
+Translated so far: main screen. TODO: sheets/forms, toasts, tour, chat, notifications, archive, recording.
+Bump `?v=` in the `i18n.js` import inside app.js together with index.html.
+
 ## Versions
 - **v1.0** (branch `v1`): original layout.
 - **v1.2** (current `main`): "This week" card at the top (time, place, host, sunum, RSVP), calmer page,

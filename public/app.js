@@ -1,5 +1,6 @@
 // Thursday Bros — single-page client. No framework: state → render() → event delegation.
 import { HADITHS } from "./hadiths.js";
+import { T, P, LANG, loc, setLang } from "./i18n.js?v=11";
 import { applyAction as demoApply, advance as demoAdvance, view as demoView } from "./core.mjs";
 
 /* ---------- visitor preview mode (/?demo): live data, every action stays in this browser ---------- */
@@ -66,7 +67,7 @@ const TYPES = [
   { id: "iman", label: "Daily iman" },
   { id: "other", label: "Other" },
 ];
-const typeLabel = (id) => TYPES.find((t) => t.id === id)?.label || "Konu";
+const typeLabel = (id) => T(TYPES.find((t) => t.id === id)?.label || "Konu");
 
 /* ---------- state ---------- */
 let S = null;                      // server view
@@ -85,18 +86,18 @@ const hue = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.cha
 const avatar = (id, cls = "") =>
   `<span class="avatar ${cls}" style="background:hsl(${hue(id)} 55% 86%);color:hsl(${hue(id)} 45% 22%)">${esc(initials(id))}</span>`;
 
-const fmtDate = (id, opts) => new Date(id + "T12:00:00Z").toLocaleDateString("en-US", { timeZone: "UTC", ...opts });
+const fmtDate = (id, opts) => new Date(id + "T12:00:00Z").toLocaleDateString(loc, { timeZone: "UTC", ...opts });
 const fmtTime = (hhmm) => {
   if (!/^\d{1,2}:\d{2}$/.test(hhmm || "")) return hhmm || "";
   const [h, m] = hhmm.split(":").map(Number);
-  return new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString("en-US", { timeZone: "UTC", hour: "numeric", minute: "2-digit" });
+  return new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString(loc, { timeZone: "UTC", hour: "numeric", minute: "2-digit" });
 };
 function left(ms) {
-  if (ms <= 0) return "now";
+  if (ms <= 0) return T("now");
   const h = Math.ceil(ms / HOUR);
-  if (h < 24) return `${h}h`;
+  if (h < 24) return T("{h}h", { h });
   const d = Math.ceil(ms / DAY);
-  return `${d} day${d > 1 ? "s" : ""}`;
+  return P(d, "{n} day", "{n} days");
 }
 
 /* ---------- api ---------- */
@@ -298,9 +299,9 @@ function render() {
   $("#app").innerHTML = `
     <header class="topbar"><div class="topbar-in">
       <div class="brand">${logo()}<span class="wordmark">Thursday Bros</span>
-        <button class="icon-btn refresh" data-a="reload" title="Refresh" aria-label="Refresh">${ic("refresh")}</button></div>
-      <button class="icon-btn has-badge" data-a="chat" title="Chat" aria-label="Chat">${ic("chat")}${chatUnreadTotal() ? `<span class="badge-dot">${chatUnreadTotal()}</span>` : ""}</button>
-      <button class="icon-btn has-badge" data-a="notifs" title="Notifications" aria-label="Notifications">${ic("bell")}${notifUnread() ? `<span class="badge-dot">${notifUnread()}</span>` : ""}</button>
+        <button class="icon-btn refresh" data-a="reload" title="${T("Refresh")}" aria-label="${T("Refresh")}">${ic("refresh")}</button></div>
+      <button class="icon-btn has-badge" data-a="chat" title="${T("Chat")}" aria-label="${T("Chat")}">${ic("chat")}${chatUnreadTotal() ? `<span class="badge-dot">${chatUnreadTotal()}</span>` : ""}</button>
+      <button class="icon-btn has-badge" data-a="notifs" title="${T("Notifications")}" aria-label="${T("Notifications")}">${ic("bell")}${notifUnread() ? `<span class="badge-dot">${notifUnread()}</span>` : ""}</button>
       <button class="avatar" data-a="profile" title="${esc(nameOf(me))} — profile & my notes" style="background:hsl(${hue(me)} 55% 86%);color:hsl(${hue(me)} 45% 22%)">${esc(initials(me))}</button>
     </div></header>
     <main class="wrap">
@@ -316,7 +317,7 @@ function render() {
       ${renderArchive()}
       <div class="foot">
         ${DEMO ? "" : installBar()}
-        <button class="btn outlined" data-a="feedback">${ic("chat")} Send feedback & ideas${(S.state.feedback || []).length ? ` <span class="muted small">· ${(S.state.feedback || []).length}</span>` : ""}</button>
+        <button class="btn outlined" data-a="feedback">${ic("chat")} ${T("Send feedback & ideas")}${(S.state.feedback || []).length ? ` <span class="muted small">· ${(S.state.feedback || []).length}</span>` : ""}</button>
         <p class="foot-note">Selam, ${esc(nameOf(me))} · Allah kabul etsin</p>
       </div>
     </main>`;
@@ -331,18 +332,18 @@ function renderHostPrompt() {
   const skipped = (w.hostSkips || []).filter((x) => member(x));
   if (!h) return `<section class="hero warn">
       <div class="deco">${ic("home")}</div>
-      <h2>No host yet for ${esc(day)}</h2>
-      <p>Everyone in the yemek sırası has passed this week. Can you host?</p>
-      <button class="btn filled lg" data-a="hostYes">${ic("home")} I can host</button></section>`;
+      <h2>${esc(T("No host yet for {day}", { day }))}</h2>
+      <p>${T("Everyone in the yemek sırası has passed this week. Can you host?")}</p>
+      <button class="btn filled lg" data-a="hostYes">${ic("home")} ${T("I can host")}</button></section>`;
   if (h.id !== me || h.confirmed) return "";
   return `<section class="hero warn">
     <div class="deco">${ic("home")}</div>
     <span class="chip">${ic("home")} Yemek sırası</span>
-    <h2>${skipped.length ? `${esc(skipped.map(nameOf).join(", "))} can't host this week — can you host on ${esc(day)}?` : `You're hosting on ${esc(day)} 🏠`}</h2>
-    <p>${skipped.length ? "If you can't either, it'll ask the next person in the order." : "Please confirm and share the address and any details: gate code, parking, food…"}</p>
+    <h2>${skipped.length ? esc(T("{names} can't host this week — can you host on {day}?", { names: skipped.map(nameOf).join(", "), day })) : esc(T("You're hosting on {day} 🏠", { day }))}</h2>
+    <p>${skipped.length ? T("If you can't either, it'll ask the next person in the order.") : T("Please confirm and share the address and any details: gate code, parking, food…")}</p>
     <div class="row">
-      <button class="btn filled lg" data-a="hostYes">${ic("check")} Yes, I'll host</button>
-      <button class="btn text" data-a="hostSkip">${skipped.length ? "I can't" : "Skip this week"}</button>
+      <button class="btn filled lg" data-a="hostYes">${ic("check")} ${T("Yes, I'll host")}</button>
+      <button class="btn text" data-a="hostSkip">${skipped.length ? T("I can't") : T("Skip this week")}</button>
     </div></section>`;
 }
 
@@ -359,12 +360,12 @@ function renderPrompt() {
     const remain = w.ask.askedAt + 24 * HOUR - t;
     return `<section class="hero warn">
       <div class="deco">${ic("mic")}</div>
-      <span class="chip">${ic("clock")} ${left(remain)} to answer</span>
-      <h2>No one volunteered this week. Can you present on ${esc(day)}?</h2>
-      <p>Any short iman topic is perfect — 10–15 minutes. If you can't, it passes to the next person.</p>
+      <span class="chip">${ic("clock")} ${T("{t} to answer", { t: left(remain) })}</span>
+      <h2>${esc(T("No one volunteered this week. Can you present on {day}?", { day }))}</h2>
+      <p>${T("Any short iman topic is perfect — 10–15 minutes. If you can't, it passes to the next person.")}</p>
       <div class="row">
-        <button class="btn filled lg" data-a="claim" data-week="${w.id}">${ic("check")} Yes, I'll present</button>
-        <button class="btn text" data-a="decline">Not this time</button>
+        <button class="btn filled lg" data-a="claim" data-week="${w.id}">${ic("check")} ${T("Yes, I'll present")}</button>
+        <button class="btn text" data-a="decline">${T("Not this time")}</button>
       </div></section>`;
   }
 
@@ -376,11 +377,11 @@ function renderWeekTabs() {
   return `<nav class="weeks" aria-label="Weeks">${ids.map((id) => {
     const w = S.state.weeks[id];
     const today = new Date().toLocaleDateString("en-CA", { timeZone: S.state.settings.tz || undefined });
-    const label = id === S.currentWeekId ? (id === today ? "Today" : "Next sohbet") : fmtDate(id, { weekday: "short" });
+    const label = id === S.currentWeekId ? (id === today ? T("Today") : T("Next sohbet")) : fmtDate(id, { weekday: "short" });
     const h = hostOf(w);
-    const sub = w.cancelled ? `<span class="small muted">No sohbet</span>` :
-      `${h?.confirmed ? `<span class="tick" title="Host confirmed">${ic("check")}</span>` : ""}<span class="dot ${w.konu ? "full" : ""}" title="${w.konu ? "Sunum taken" : "Sunum still open"}"></span>
-       <span class="wk-host">${ic("home")}${h ? esc(nameOf(h.id)) : "Host?"}</span>`;
+    const sub = w.cancelled ? `<span class="small muted">${T("No sohbet")}</span>` :
+      `${h?.confirmed ? `<span class="tick" title="${T("Host confirmed")}">${ic("check")}</span>` : ""}<span class="dot ${w.konu ? "full" : ""}" title="${w.konu ? T("Sunum taken") : T("Sunum still open")}"></span>
+       <span class="wk-host">${ic("home")}${h ? esc(nameOf(h.id)) : T("Host?")}</span>`;
     return `<button class="wk ${id === sel ? "sel" : ""}" data-a="week" data-id="${id}">
       <small>${label}</small><b>${fmtDate(id, { month: "short", day: "numeric" })}</b><span class="dots">${sub}</span></button>`;
   }).join("")}</nav>`;
@@ -397,47 +398,47 @@ function renderThursday(w) {
   const admin = !roleId("feedback") || roleId("feedback") === me;
   const canHostEdit = admin || h?.id === me;
   const isCur = w.id === S.currentWeekId, today = w.id === localToday();
-  const kicker = today ? "Today" : isCur ? "This week" : "Coming up";
-  const hostSub = !h ? "" : h.confirmed ? `<span class="ok">${ic("check")} Confirmed</span>`
-    : `Waiting to confirm${skipped.length ? ` · covering for ${esc(skipped.map(nameOf).join(", "))}` : h.changed ? " · swapped" : ""}`;
+  const kicker = today ? T("Today") : isCur ? T("This week") : T("Coming up");
+  const hostSub = !h ? "" : h.confirmed ? `<span class="ok">${ic("check")} ${T("Confirmed")}</span>`
+    : `${T("Waiting to confirm")}${skipped.length ? esc(T(" · covering for {names}", { names: skipped.map(nameOf).join(", ") })) : h.changed ? T(" · swapped") : ""}`;
   const hostAct = !h ? "" : !h.confirmed && h.id !== me
-    ? `<button type="button" class="btn text small" data-a="personShare" data-id="${h.id}" data-kind="host">${ic("chat")} Remind</button>`
+    ? `<button type="button" class="btn text small" data-a="personShare" data-id="${h.id}" data-kind="host">${ic("chat")} ${T("Remind")}</button>`
     : `<button class="btn text small" data-a="rota">Sıra</button>`;
   return `<section class="card thu">
     <div class="thu-h">
       <div class="grow"><div class="kicker">${kicker}</div>
         <h1>${fmtDate(w.id, { weekday: "long", month: "short", day: "numeric" })}</h1></div>
-      <button class="icon-btn" data-a="share" title="Share this week" aria-label="Share this week">${ic("share")}</button>
-      ${canHostEdit ? `<button class="icon-btn" data-a="host" title="Host & details" aria-label="Change host or details">${ic("edit")}</button>` : ""}
+      <button class="icon-btn" data-a="share" title="${T("Share this week")}" aria-label="${T("Share this week")}">${ic("share")}</button>
+      ${canHostEdit ? `<button class="icon-btn" data-a="host" title="${T("Host & details")}" aria-label="${T("Host & details")}">${ic("edit")}</button>` : ""}
     </div>
-    ${w.cancelled ? `<div class="banner" style="margin:0 0 4px">${ic("ban")} No sohbet this week.</div>
-        <button class="btn text small" data-a="cancel">Restore week</button>` : `
+    ${w.cancelled ? `<div class="banner" style="margin:0 0 4px">${ic("ban")} ${T("No sohbet this week.")}</div>
+        <button class="btn text small" data-a="cancel">${T("Restore week")}</button>` : `
     <div class="thu-rows">
-      <div class="thu-row">${ic("clock")}<div class="grow">${ready ? `<b>${esc(fmtTime(weekTime(w)))}</b>` : `<span class="muted">Time & place once the host confirms</span>`}</div></div>
+      <div class="thu-row">${ic("clock")}<div class="grow">${ready ? `<b>${esc(fmtTime(weekTime(w)))}</b>` : `<span class="muted">${T("Time & place once the host confirms")}</span>`}</div></div>
       ${ready && place ? `<div class="thu-row">${ic("pin")}<div class="grow"><a class="addr-link" href="${gmaps(place)}" target="_blank" rel="noopener">${esc(place)}</a>
         <div class="row maps"><a class="btn outlined small" href="${gmaps(place)}" target="_blank" rel="noopener">Google Maps</a><a class="btn outlined small" href="${amaps(place)}" target="_blank" rel="noopener">Apple Maps</a></div></div></div>` : ""}
       <div class="thu-row">${ic("home")}<div class="grow">${h
-        ? `<b>${esc(nameOf(h.id))}</b>${h.id === me ? ' <span class="muted small">(you)</span>' : ""}<div class="sub">${hostSub}</div>`
-        : `<span class="muted">${(S.state.settings.hostRota || []).length ? "No host yet — everyone passed" : "No host yet"}</span>`}</div>
+        ? `<b>${esc(nameOf(h.id))}</b>${h.id === me ? ` <span class="muted small">${T("(you)")}</span>` : ""}<div class="sub">${hostSub}</div>`
+        : `<span class="muted">${(S.state.settings.hostRota || []).length ? T("No host yet — everyone passed") : T("No host yet")}</span>`}</div>
         ${h ? hostAct : (S.state.settings.hostRota || []).length
-          ? `<button class="btn tonal small" data-a="hostYes">I can host</button>`
-          : `<button class="btn tonal small" data-a="rotaEdit">Set sırası</button>`}</div>
-      ${h?.id === me && !h.confirmed && !isCur ? `<div class="row" style="margin:0 0 4px 36px"><button class="btn tonal small" data-a="hostYes">${ic("check")} Confirm</button><button class="btn text small" data-a="hostSkip">Skip this week</button></div>` : ""}
-      ${h?.id === me && h.confirmed ? `<button class="btn text small" data-a="hostYes" style="margin:-4px 0 4px 28px">${ic("edit")} Update address & notes</button>` : ""}
-      ${w.hostNotes && ready ? `<div class="notes-box thu-notes"><div class="lbl">Notes from host</div><div class="notes">${esc(w.hostNotes)}</div></div>` : ""}
+          ? `<button class="btn tonal small" data-a="hostYes">${T("I can host")}</button>`
+          : `<button class="btn tonal small" data-a="rotaEdit">${T("Set sırası")}</button>`}</div>
+      ${h?.id === me && !h.confirmed && !isCur ? `<div class="row" style="margin:0 0 4px 36px"><button class="btn tonal small" data-a="hostYes">${ic("check")} ${T("Confirm")}</button><button class="btn text small" data-a="hostSkip">${T("Skip this week")}</button></div>` : ""}
+      ${h?.id === me && h.confirmed ? `<button class="btn text small" data-a="hostYes" style="margin:-4px 0 4px 28px">${ic("edit")} ${T("Update address & notes")}</button>` : ""}
+      ${w.hostNotes && ready ? `<div class="notes-box thu-notes"><div class="lbl">${T("Notes from host")}</div><div class="notes">${esc(w.hostNotes)}</div></div>` : ""}
       ${sunumRow(w)}
     </div>
     <div class="rsvp" data-tour="rsvp">
       <div class="seg2" role="group" aria-label="Attendance">
-        <button class="${mine === "yes" ? "on" : ""}" data-a="rsvp" data-v="yes" aria-pressed="${mine === "yes"}">${mine === "yes" ? ic("check") : ""}Geliyorum <b>${yes.length}</b></button>
-        <button class="${mine === "no" ? "on no" : ""}" data-a="rsvp" data-v="no" aria-pressed="${mine === "no"}">${mine === "no" ? ic("check") : ""}Gelemiyorum <b>${no.length}</b></button>
+        <button class="${mine === "yes" ? "on" : ""}" data-a="rsvp" data-v="yes" aria-pressed="${mine === "yes"}">${mine === "yes" ? ic("check") : ""}${T("Geliyorum")} <b>${yes.length}</b></button>
+        <button class="${mine === "no" ? "on no" : ""}" data-a="rsvp" data-v="no" aria-pressed="${mine === "no"}">${mine === "no" ? ic("check") : ""}${T("Gelemiyorum")} <b>${no.length}</b></button>
       </div>
       <button type="button" class="attend-link" data-a="attendance" data-week="${w.id}">
         ${yes.length ? `<span class="faces">${yes.slice(0, 10).map((id) => `<span title="${esc(nameOf(id))}">${avatar(id, "sm")}</span>`).join("")}</span>
-          <span class="small">${esc(yes.slice(0, 3).map(nameOf).join(", "))}${yes.length > 3 ? ` +${yes.length - 3}` : ""}</span>` : `<span class="small muted">No one yet</span>`}
-        <span class="small attend-more">See who ›</span></button>
+          <span class="small">${esc(yes.slice(0, 3).map(nameOf).join(", "))}${yes.length > 3 ? ` +${yes.length - 3}` : ""}</span>` : `<span class="small muted">${T("No one yet")}</span>`}
+        <span class="small attend-more">${T("See who ›")}</span></button>
     </div>
-    ${admin ? `<div class="thu-foot"><button class="btn text small" data-a="cancel">Cancel this week</button></div>` : ""}`}
+    ${admin ? `<div class="thu-foot"><button class="btn text small" data-a="cancel">${T("Cancel this week")}</button></div>` : ""}`}
   </section>`;
 }
 
@@ -446,22 +447,22 @@ function sunumRow(w) {
   const k = w.konu, t = now(), meta = S.weekMeta[w.id];
   let body, act = "";
   if (k) {
-    body = `<b>${esc(k.title)}</b><div class="sub">Sunum · ${esc(nameOf(k.presenterId))}${k.presenterId === me ? " (you)" : ""}</div>`;
+    body = `<b>${esc(k.title)}</b><div class="sub">${esc(T("Sunum · {n}", { n: nameOf(k.presenterId) }))}${k.presenterId === me ? " " + T("(you)") : ""}</div>`;
   } else if (w.ask) {
     const remain = w.ask.askedAt + 24 * HOUR - t;
     body = w.ask.memberId === me
-      ? `<b>Sunum</b><div class="sub">You're being asked · ${left(remain)} to answer</div>`
-      : `<b>Sunum open</b><div class="sub">Asking ${esc(nameOf(w.ask.memberId))} · ${left(remain)} left</div>`;
+      ? `<b>${T("Sunum")}</b><div class="sub">${T("You're being asked · {t} to answer", { t: left(remain) })}</div>`
+      : `<b>${T("Sunum open")}</b><div class="sub">${esc(T("Asking {n} · {t} left", { n: nameOf(w.ask.memberId), t: left(remain) }))}</div>`;
     act = w.ask.memberId === me ? "" : canClaim(w)
-      ? `<button class="btn tonal small" data-a="claim" data-week="${w.id}">Take it</button>`
-      : `<button type="button" class="btn text small" data-a="personShare" data-id="${w.ask.memberId}" data-kind="sunum">${ic("chat")} Nudge</button>`;
+      ? `<button class="btn tonal small" data-a="claim" data-week="${w.id}">${T("Take it")}</button>`
+      : `<button type="button" class="btn text small" data-a="personShare" data-id="${w.ask.memberId}" data-kind="sunum">${ic("chat")} ${T("Nudge")}</button>`;
   } else {
     const ms = meta ? meta.cutoff - t : 0;
-    const when = w.id !== S.currentWeekId ? "Open for a volunteer" : ms > 0 ? (ms < DAY ? `Last day · ${left(ms)} left` : `${left(ms)} left to volunteer`) : "Still open — anyone can step in";
+    const when = w.id !== S.currentWeekId ? T("Open for a volunteer") : ms > 0 ? (ms < DAY ? T("Last day · {t} left", { t: left(ms) }) : T("{t} left to volunteer", { t: left(ms) })) : T("Still open — anyone can step in");
     const cd = !canClaim(w) && cooldown(me) > 0
-      ? (upcomingTalk(me) ? ` · you're on ${esc(shortDate(upcomingTalk(me).id))}` : ` · your turn after ${cooldown(me)} more`) : "";
-    body = `<b>Sunum open</b><div class="sub">${when}${cd}</div>`;
-    act = canClaim(w) ? `<button class="btn filled small" data-a="claim" data-week="${w.id}">${ic("mic")} Take it</button>` : "";
+      ? (upcomingTalk(me) ? esc(T(" · you're on {d}", { d: shortDate(upcomingTalk(me).id) })) : T(" · your turn after {n} more", { n: cooldown(me) })) : "";
+    body = `<b>${T("Sunum open")}</b><div class="sub">${when}${cd}</div>`;
+    act = canClaim(w) ? `<button class="btn filled small" data-a="claim" data-week="${w.id}">${ic("mic")} ${T("Take it")}</button>` : "";
   }
   return `<div class="thu-row" data-tour="sunum">${ic("mic")}<div class="grow">${body}</div>${act}</div>`;
 }
@@ -476,16 +477,16 @@ function clampBlock(key, text) {
 function renderHadis(w) {
   const h = w.hadis, owner = roleId("hadis"), edit = canEdit("hadis");
   return `<section class="card" data-tour="hadis">
-    <div class="card-h"><span class="badge">${ic("book")}</span><h3>Hadis</h3>
+    <div class="card-h"><span class="badge">${ic("book")}</span><h3>${T("Hadis")}</h3>
       ${owner ? `<span class="owner">${esc(nameOf(owner))}</span>` : ""}
-      ${h && edit ? `<button class="icon-btn" data-a="hadis" aria-label="Edit hadis">${ic("edit")}</button>` : ""}</div>
+      ${h && edit ? `<button class="icon-btn" data-a="hadis" aria-label="${T("Add hadis")}">${ic("edit")}</button>` : ""}</div>
     ${h ? `
       <p class="quote">${esc(h.text)}</p>
       ${h.source ? `<div class="src">— ${esc(h.source)}</div>` : ""}
-      ${h.notes ? `<div class="notes-box"><div class="lbl">Discussion notes</div>${clampBlock("h" + w.id, h.notes)}
-        ${owner === me ? `<button class="btn text small move-priv" data-a="toPrivate" data-part="hadis" data-week="${w.id}">${ic("lock")} Move to My notes</button>` : ""}</div>` : ""}`
-    : edit ? `<div class="row"><button class="btn tonal" data-a="hadis">${ic("plus")} Add hadis</button><button class="btn text small" data-a="example" data-k="hadis">See an example</button></div>`
-    : `<p class="empty" style="margin:0">${esc(nameOf(owner))} will post this week's hadis here.</p>`}
+      ${h.notes ? `<div class="notes-box"><div class="lbl">${T("Discussion notes")}</div>${clampBlock("h" + w.id, h.notes)}
+        ${owner === me ? `<button class="btn text small move-priv" data-a="toPrivate" data-part="hadis" data-week="${w.id}">${ic("lock")} ${T("Move to My notes")}</button>` : ""}</div>` : ""}`
+    : edit ? `<div class="row"><button class="btn tonal" data-a="hadis">${ic("plus")} ${T("Add hadis")}</button><button class="btn text small" data-a="example" data-k="hadis">${T("See an example")}</button></div>`
+    : `<p class="empty" style="margin:0">${esc(T("{n} will post this week's hadis here.", { n: nameOf(owner) }))}</p>`}
     ${owner === me ? privateBox(w, "hadis") : ""}
   </section>`;
 }
@@ -493,16 +494,16 @@ function renderHadis(w) {
 function renderSohbet(w) {
   const so = w.sohbet, owner = roleId("sohbet"), edit = canEdit("sohbet");
   return `<section class="card">
-    <div class="card-h"><span class="badge">${ic("chat")}</span><h3>Sohbet</h3>
+    <div class="card-h"><span class="badge">${ic("chat")}</span><h3>${T("Sohbet")}</h3>
       ${owner ? `<span class="owner">${esc(nameOf(owner))}</span>` : ""}
       ${so && edit ? `<button class="icon-btn" data-a="sohbet" aria-label="Edit sohbet">${ic("edit")}</button>` : ""}</div>
     ${so ? `
       ${so.title ? `<p class="title">${esc(so.title)}</p>` : ""}
-      ${so.notes ? `<div class="notes-box"><div class="lbl">Notes · skim before sohbet</div>${clampBlock("s" + w.id, so.notes)}
+      ${so.notes ? `<div class="notes-box"><div class="lbl">${T("Notes · skim before sohbet")}</div>${clampBlock("s" + w.id, so.notes)}
         ${owner === me ? `<button class="btn text small move-priv" data-a="toPrivate" data-part="sohbet" data-week="${w.id}">${ic("lock")} Move to My notes</button>` : ""}</div>` : ""}
-      ${so.link ? `<div class="actions"><a class="btn outlined" href="${esc(so.link)}" target="_blank" rel="noopener">${ic("link")} Open link</a></div>` : ""}`
-    : edit ? `<div class="row"><button class="btn tonal" data-a="sohbet">${ic("plus")} Add sohbet topic</button><button class="btn text small" data-a="example" data-k="sohbet">See an example</button></div>`
-    : `<p class="empty" style="margin:0">${esc(nameOf(owner))} will share the sohbet topic and notes here before Thursday.</p>`}
+      ${so.link ? `<div class="actions"><a class="btn outlined" href="${esc(so.link)}" target="_blank" rel="noopener">${ic("link")} ${T("Open link")}</a></div>` : ""}`
+    : edit ? `<div class="row"><button class="btn tonal" data-a="sohbet">${ic("plus")} ${T("Add sohbet topic")}</button><button class="btn text small" data-a="example" data-k="sohbet">${T("See an example")}</button></div>`
+    : `<p class="empty" style="margin:0">${esc(T("{n} will share the sohbet topic and notes here before Thursday.", { n: nameOf(owner) }))}</p>`}
     ${owner === me ? privateBox(w, "sohbet") : ""}
   </section>`;
 }
@@ -510,7 +511,7 @@ function renderSohbet(w) {
 /** 🔒 Private notes box — only rendered for the person running that part. */
 function privateBox(w, part) {
   return `<details class="private" data-priv="${part}" data-week="${w.id}">
-    <summary>${ic("lock")} My notes <span class="muted small">· only you can see these</span></summary>
+    <summary>${ic("lock")} ${T("My notes")} <span class="muted small">· ${T("only you can see these")}</span></summary>
     <div class="priv-body"><textarea rows="6" maxlength="20000" placeholder="Your own prep: reminders, points you want to make, questions to ask…"></textarea>
     <div class="row" style="justify-content:space-between;margin-top:8px"><span class="small muted priv-status"></span>
     <button type="button" class="btn tonal small" data-a="privSave">Save</button></div></div></details>`;
@@ -551,7 +552,7 @@ function sampleKonu() {
     <p class="title">Hüvallahüllezî — Haşr 22–24 ${instr("başlık: kısa ve net")}</p>
     <div class="chips" style="margin-bottom:6px"><span class="chip on">Esma-ül Hüsna</span> ${instr("tür: Esma, Ayet, Siyer, Daily iman…")}</div>
     <p class="notes" style="margin-top:8px">Haşr suresinin son ayetlerindeki isimler ve günlük hayatımıza yansıması. ${instr("1–2 cümle özet")}</p>
-    <div class="notes-box"><div class="lbl">Prep notes · skim before sohbet</div><div class="notes">Haşr 22: "O, kendisinden başka ilah olmayan Allah'tır; gaybı da görünen âlemi de bilendir…"
+    <div class="notes-box"><div class="lbl">${T("Prep notes · skim before sohbet")}</div><div class="notes">Haşr 22: "O, kendisinden başka ilah olmayan Allah'tır; gaybı da görünen âlemi de bilendir…"
 1) Âlimü'l-gaybi ve'ş-şehâde
 2) er-Rahmân, er-Rahîm
 3) el-Melik, el-Kuddûs, es-Selâm
@@ -565,7 +566,7 @@ function sampleSohbet() {
   return `<div class="sample" aria-label="Example">
     <span class="sample-tag">Örnek · instruction sample</span>
     <p class="title">Tevekkül: sebebe sarılıp Allah'a dayanmak ${instr("bu haftanın sohbet konusu")}</p>
-    <div class="notes-box"><div class="lbl">Notes · skim before sohbet</div><div class="notes">• Âl-i İmrân 159: "…Bir kere de karar verdin mi, artık Allah'a tevekkül et."
+    <div class="notes-box"><div class="lbl">${T("Notes · skim before sohbet")}</div><div class="notes">• Âl-i İmrân 159: "…Bir kere de karar verdin mi, artık Allah'a tevekkül et."
 • "Deveni bağla, sonra tevekkül et." (Tirmizî, Kıyâmet 60)
 • Soru: İş/okul stresinde tevekkülü nasıl yaşarız?
 ${instr("ayetler, hadisler, ana noktalar, sorular — herkes sohbetten önce göz atar")}</div></div>
@@ -578,20 +579,20 @@ function renderKonu(w) {
   if (!k) return "";
   const mine = k.presenterId === me;
   return `<section class="card">
-    <div class="card-h"><span class="badge">${ic("mic")}</span><h3>Sunum</h3>
+    <div class="card-h"><span class="badge">${ic("mic")}</span><h3>${T("Sunum")}</h3>
       ${mine ? `<button class="icon-btn" data-a="editKonu" aria-label="Edit topic">${ic("edit")}</button>` : ""}</div>
     <div class="person">${avatar(k.presenterId, "lg")}
       <div><div class="who">${esc(nameOf(k.presenterId))}</div>
-      <div class="sub">${mine ? "You're presenting" : k.via === "queue" ? "Stepped up from the queue" : "Volunteered"} · jazakallah</div></div></div>
+      <div class="sub">${mine ? T("You're presenting") : k.via === "queue" ? T("Stepped up from the queue") : T("Volunteered")} · ${T("jazakallah")}</div></div></div>
     <p class="title">${esc(k.title)}</p>
     <div class="chips" style="margin-bottom:6px"><span class="chip on">${esc(typeLabel(k.topicType))}</span></div>
     ${k.summary ? `<p class="notes" style="margin-top:8px">${esc(k.summary)}</p>` : ""}
-    ${k.notes ? `<div class="notes-box"><div class="lbl">Prep notes · skim before sohbet</div>${clampBlock("k" + w.id, k.notes)}
+    ${k.notes ? `<div class="notes-box"><div class="lbl">${T("Prep notes · skim before sohbet")}</div>${clampBlock("k" + w.id, k.notes)}
       ${mine ? `<button class="btn text small move-priv" data-a="toPrivate" data-part="sunum" data-week="${w.id}">${ic("lock")} Move to My notes</button>` : ""}</div>` : ""}
-    ${k.link ? `<div class="actions"><a class="btn outlined" href="${esc(k.link)}" target="_blank" rel="noopener">${ic("link")} See the sunum resources</a></div>` : ""}
+    ${k.link ? `<div class="actions"><a class="btn outlined" href="${esc(k.link)}" target="_blank" rel="noopener">${ic("link")} ${T("See the sunum resources")}</a></div>` : ""}
     ${mine ? `<div class="row actions">
-      ${!k.notes ? `<button class="btn tonal" data-a="editKonu">${ic("plus")} Add notes for everyone</button>` : ""}
-      <span class="spacer"></span><button class="btn text danger" data-a="release">Give up slot</button></div>
+      ${!k.notes ? `<button class="btn tonal" data-a="editKonu">${ic("plus")} ${T("Add notes for everyone")}</button>` : ""}
+      <span class="spacer"></span><button class="btn text danger" data-a="release">${T("Give up slot")}</button></div>
       ${privateBox(w, "sunum")}` : ""}
   </section>`;
 }
@@ -609,7 +610,7 @@ function archiveRows() {
     weekTitle(w), ...(w.recap?.tags || []), w.recap?.snippet, w.sohbet?.title, w.konu?.title, w.hadis?.source, w.hadis?.text,
     w.konu && nameOf(w.konu.presenterId), fmtDate(w.id, { month: "long", year: "numeric" }),
   ].filter(Boolean).join(" ")).includes(t));
-  if (!rows.length) return `<li class="muted small" style="padding:14px 2px">${t ? "Nothing found." : "No past sohbets yet."}</li>`;
+  if (!rows.length) return `<li class="muted small" style="padding:14px 2px">${t ? T("Nothing found.") : T("No past sohbets yet.")}</li>`;
   return rows.map((w) => `<li><button class="arch-row" data-a="detail" data-week="${w.id}">
     <span class="date">${fmtDate(w.id, { month: "short", day: "numeric" })}<small>${fmtDate(w.id, { year: "numeric" })}</small></span>
     <span class="grow"><span class="t">${esc(weekTitle(w))}</span>
@@ -620,7 +621,7 @@ function archiveRows() {
 function renderArchive() {
   if (!pastWeeks().length) return "";
   return `<section class="archive"><h2>Geçmiş sohbetler</h2>
-    <div class="picker-box search">${ic("search")}<input type="search" id="arch-q" placeholder="Search topics, tags, names…" value="${esc(archiveQ)}" aria-label="Search past sohbets" /></div>
+    <div class="picker-box search">${ic("search")}<input type="search" id="arch-q" placeholder="${T("Search topics, tags, names…")}" value="${esc(archiveQ)}" aria-label="Search past sohbets" /></div>
     <ul class="list" id="arch-list">${archiveRows()}</ul></section>`;
 }
 document.addEventListener("input", (e) => {
@@ -630,15 +631,15 @@ document.addEventListener("input", (e) => {
 function renderRecapCard(w) {
   const r = w.recap;
   return `<section class="card">
-    <div class="card-h"><span class="badge">${ic("notes")}</span><h3>Notlar · Recap</h3>
+    <div class="card-h"><span class="badge">${ic("notes")}</span><h3>${T("Notlar · Recap")}</h3>
       ${r ? `<button class="icon-btn" data-a="recap" data-week="${w.id}" aria-label="Edit notes">${ic("edit")}</button>` : ""}</div>
     ${r ? `<p class="title">${esc(r.title || "Notes")}</p>${r.snippet ? `<p class="notes" style="margin-top:0">${esc(r.snippet)}…</p>` : ""}
-      <div class="row actions"><button class="btn tonal" data-a="detail" data-week="${w.id}">Open notes</button>
-      <button class="btn text" data-a="record" data-week="${w.id}">${ic("rec")} Record more</button></div>`
-    : `<p class="empty">During or after the sohbet: record it, upload audio, paste a transcript, or type notes. It all goes into Geçmiş sohbetler.</p>
-      <div class="row"><button class="btn filled" data-a="record" data-week="${w.id}">${ic("rec")} Record sohbet</button>
-      <button class="btn tonal" data-a="recap" data-week="${w.id}">${ic("notes")} Add notes</button></div>`}
-    <button class="btn text small my-nb" data-a="profile" data-week="${w.id}">${ic("lock")} My personal notes</button>
+      <div class="row actions"><button class="btn tonal" data-a="detail" data-week="${w.id}">${T("Open notes")}</button>
+      <button class="btn text" data-a="record" data-week="${w.id}">${ic("rec")} ${T("Record more")}</button></div>`
+    : `<p class="empty">${T("During or after the sohbet: record it, upload audio, paste a transcript, or type notes. It all goes into Geçmiş sohbetler.")}</p>
+      <div class="row"><button class="btn filled" data-a="record" data-week="${w.id}">${ic("rec")} ${T("Record sohbet")}</button>
+      <button class="btn tonal" data-a="recap" data-week="${w.id}">${ic("notes")} ${T("Add notes")}</button></div>`}
+    <button class="btn text small my-nb" data-a="profile" data-week="${w.id}">${ic("lock")} ${T("My personal notes")}</button>
   </section>`;
 }
 
@@ -647,12 +648,13 @@ function renderWho() {
   $("#app").innerHTML = `<main class="who-page">
     <div class="logo">${logo()}</div>
     <h1>Selamün aleyküm</h1>
-    <div class="who-brand">Thursday Bros · weekly sohbet</div>
-    <p>Start typing your name and pick yourself from the list. This phone will remember you.</p>
+    <div class="who-brand">Thursday Bros · ${T("weekly sohbet")}</div>
+    <p>${T("Start typing your name and pick yourself from the list. This phone will remember you.")}</p>
     <div class="picker">
-      <div class="picker-box">${ic("users")}<input type="text" id="who-q" placeholder="Your name" autocomplete="off" autocapitalize="words" spellcheck="false" aria-label="Your name" aria-controls="who-list" /></div>
+      <div class="picker-box">${ic("users")}<input type="text" id="who-q" placeholder="${T("Your name")}" autocomplete="off" autocapitalize="words" spellcheck="false" aria-label="${T("Your name")}" aria-controls="who-list" /></div>
       <ul class="picker-list" id="who-list" role="listbox"></ul>
     </div>
+    ${langSwitch()}
   </main>`;
   const q = $("#who-q");
   const draw = () => {
@@ -662,8 +664,8 @@ function renderWho() {
       .sort((a, b) => (fold(a.name).startsWith(t) ? 0 : 1) - (fold(b.name).startsWith(t) ? 0 : 1));
     const exact = members().some((m) => fold(m.name) === t);
     $("#who-list").innerHTML = list.slice(0, 30).map((m) => `<li><button type="button" role="option" data-a="iam" data-id="${m.id}">${avatar(m.id, "sm")}<span>${hl(m.name, t)}</span></button></li>`).join("")
-      + (t && !exact ? `<li><button type="button" class="new" data-a="join" data-name="${esc(q.value.trim())}">${ic("plus")}<span>I'm new — add “${esc(q.value.trim())}”</span></button></li>` : "")
-      + (!list.length && !t ? `<li class="muted small" style="padding:12px">No one here yet — type your name to join.</li>` : "");
+      + (t && !exact ? `<li><button type="button" class="new" data-a="join" data-name="${esc(q.value.trim())}">${ic("plus")}<span>${esc(T("I'm new — add “{n}”", { n: q.value.trim() }))}</span></button></li>` : "")
+      + (!list.length && !t ? `<li class="muted small" style="padding:12px">${T("No one here yet — type your name to join.")}</li>` : "");
   };
   q.addEventListener("input", draw);
   q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#who-list button")?.click(); } });
@@ -769,6 +771,13 @@ function confirmHostSheet(w) {
 }
 
 
+/* ---------- language ---------- */
+function langSwitch() {
+  return `<div class="lang-sw" role="group" aria-label="Dil / Language">
+    <button type="button" class="${LANG === "en" ? "on" : ""}" data-a="lang" data-l="en" aria-pressed="${LANG === "en"}">English</button>
+    <button type="button" class="${LANG === "tr" ? "on" : ""}" data-a="lang" data-l="tr" aria-pressed="${LANG === "tr"}">Türkçe</button></div>`;
+}
+
 /* ---------- push notifications (v1.2) ---------- */
 if (!DEMO && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 async function pushState() {
@@ -800,12 +809,12 @@ async function disablePush() {
 function pushBlock(st) {
   if (st === "unsupported") return "";
   const body = {
-    install: `<p class="small muted" style="margin:0">On iPhone, notifications only work from the home screen app. Add Thursday Bros to your home screen, open it from there, then turn this on.</p>`,
-    denied: `<p class="small muted" style="margin:0">Notifications are blocked for this app. Turn them on in your phone's Settings → Notifications → Thursday Bros.</p>`,
-    off: `<button type="button" class="btn tonal block" data-a="pushOn">🔔 Turn on notifications</button>`,
-    on: `<div class="row"><button type="button" class="btn tonal" data-a="pushTest">Send me a test</button><button type="button" class="btn text" data-a="pushOff">Turn off</button></div>`,
+    install: `<p class="small muted" style="margin:0">${T("On iPhone, notifications only work from the home screen app. Add Thursday Bros to your home screen, open it from there, then turn this on.")}</p>`,
+    denied: `<p class="small muted" style="margin:0">${T("Notifications are blocked for this app. Turn them on in your phone's Settings → Notifications → Thursday Bros.")}</p>`,
+    off: `<button type="button" class="btn tonal block" data-a="pushOn">🔔 ${T("Turn on notifications")}</button>`,
+    on: `<div class="row"><button type="button" class="btn tonal" data-a="pushTest">${T("Send me a test")}</button><button type="button" class="btn text" data-a="pushOff">${T("Turn off")}</button></div>`,
   }[st];
-  return `<div id="push-wrap"><div class="section-lbl" style="margin-top:6px">Notifications ${st === "on" ? '<span class="ok" style="font-weight:500">· on</span>' : ""}</div><div style="margin-bottom:6px">${body}</div></div>`;
+  return `<div id="push-wrap"><div class="section-lbl" style="margin-top:6px">${T("Notifications")} ${st === "on" ? `<span class="ok" style="font-weight:500">${T("· on")}</span>` : ""}</div><div style="margin-bottom:6px">${body}</div></div>`;
 }
 
 async function profileSheet(focusWeek) {
@@ -827,6 +836,7 @@ async function profileSheet(focusWeek) {
     <div class="prof">${avatar(me, "lg")}<div><div class="who" style="font-size:18px;font-weight:500">${esc(m.name)}</div>
       <div class="small muted">${m.phone ? esc(m.phone) : "No WhatsApp number"}${m.address ? " · " + esc(m.address) : ""}</div></div></div>
 
+    <div class="section-lbl" style="margin-top:6px">Dil · Language</div>${langSwitch()}
     ${pushBlock(pst)}
     ${roleId("feedback") === me && !DEMO ? `<button type="button" class="btn filled block" data-a="stats" style="margin:6px 0 8px">📊 Site stats · who joined</button>
       <button type="button" class="btn tonal block" data-a="demoLink" style="margin:0 0 8px">👀 Visitor preview link (for other groups)</button>` : ""}
@@ -1548,8 +1558,8 @@ function installBar() {
   try { if (localStorage.getItem("tb.installDismissed")) return ""; } catch {}
   return `<div class="install-bar" role="button" tabindex="0" data-a="installHow" aria-label="Add Thursday Bros to your home screen — how">
     <span class="ib-ic">${logo()}</span>
-    <span class="grow"><b>Add Thursday Bros to your home screen</b><span class="small muted">Opens like an app, one tap away</span></span>
-    <button class="btn filled small" data-a="installHow">${installEvt ? "Install" : "How?"}</button>
+    <span class="grow"><b>${T("Add Thursday Bros to your home screen")}</b><span class="small muted">${T("Opens like an app, one tap away")}</span></span>
+    <button class="btn filled small" data-a="installHow">${installEvt ? T("Install") : T("How?")}</button>
     <button class="icon-btn" data-a="installHide" aria-label="Dismiss">${ic("x")}</button></div>`;
 }
 const SHARE_IOS = `<svg class="ic inl" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>`;
@@ -1942,6 +1952,7 @@ document.addEventListener("click", async (e) => {
       if (wrap) wrap.outerHTML = pushBlock(st);
       break;
     }
+    case "lang": setLang(el.dataset.l); break;
     case "example": {
       const k = el.dataset.k;
       openSheet({ title: "Example", lead: "Just a sample to show the format. It's not saved anywhere.", action: null,
