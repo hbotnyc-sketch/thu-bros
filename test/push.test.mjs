@@ -55,6 +55,16 @@ await t("subscribe + test sends an encrypted, VAPID-signed push to the member's 
   assert.equal(seen.u, sub.endpoint);
   assert.match(seen.init.headers.authorization, /^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=[\w-]+$/);
   assert.equal(JSON.parse(await decrypt(seen.init.body)).title, "T");
+  // The VAPID JWT must verify with the public key we hand to the browser (ES256, raw r||s)
+  const [, jwt, k] = seen.init.headers.authorization.match(/t=([^,]+), k=(.+)$/);
+  const [h, c, sig] = jwt.split(".");
+  assert.equal(k, (await vapidKeys(DB)).pub);
+  const pub = await crypto.subtle.importKey("raw", Buffer.from(k, "base64url"), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+  assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pub, Buffer.from(sig, "base64url"), new TextEncoder().encode(`${h}.${c}`)), "JWT signature verifies");
+  const claims = JSON.parse(Buffer.from(c, "base64url"));
+  assert.equal(claims.aud, "https://push.example");
+  assert.ok(claims.exp - Date.now() / 1000 < 24 * 3600 && claims.exp > Date.now() / 1000);
+  assert.match(claims.sub, /^(mailto:|https:\/\/)/);
 });
 await t("a gone subscription (410) is removed", async () => {
   await pushToMember(env, "aaaa1111", { title: "T" }, { fetcher: async () => new Response(null, { status: 410 }) });

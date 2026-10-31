@@ -805,7 +805,7 @@ function pushBlock(st) {
     off: `<button type="button" class="btn tonal block" data-a="pushOn">🔔 Turn on notifications</button>`,
     on: `<div class="row"><button type="button" class="btn tonal" data-a="pushTest">Send me a test</button><button type="button" class="btn text" data-a="pushOff">Turn off</button></div>`,
   }[st];
-  return `<div class="section-lbl" style="margin-top:6px">Notifications ${st === "on" ? '<span class="ok" style="font-weight:500">· on</span>' : ""}</div><div id="push-box" style="margin-bottom:6px">${body}</div>`;
+  return `<div id="push-wrap"><div class="section-lbl" style="margin-top:6px">Notifications ${st === "on" ? '<span class="ok" style="font-weight:500">· on</span>' : ""}</div><div style="margin-bottom:6px">${body}</div></div>`;
 }
 
 async function profileSheet(focusWeek) {
@@ -1929,7 +1929,6 @@ document.addEventListener("click", async (e) => {
       if (confirm("No problem — pass to the next person?")) { await act("answerAsk", { weekId: S.currentWeekId }).catch(() => {}); toast("Passed on — maybe next time!"); }
       break;
     case "pushOn": case "pushOff": case "pushTest": {
-      const box = $("#push-box");
       try {
         if (el.dataset.a === "pushOn") { el.disabled = true; await enablePush(); toast("Notifications on — sending a test…"); await fetch("/api/push/test", { method: "POST", body: JSON.stringify({ actor: me }) }); }
         else if (el.dataset.a === "pushOff") { await disablePush(); toast("Notifications off"); }
@@ -1939,7 +1938,8 @@ document.addEventListener("click", async (e) => {
         }
       } catch (err) { toast(err.message); if (el) el.disabled = false; }
       const st = await pushState();
-      if (box) box.parentElement.outerHTML = pushBlock(st);
+      const wrap = $("#push-wrap");
+      if (wrap) wrap.outerHTML = pushBlock(st);
       break;
     }
     case "example": {
