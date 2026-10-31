@@ -745,3 +745,5 @@ details.ex[open] > summary { margin-bottom: 8px; }
 .lang-sw button + button { border-left: 1px solid var(--outline); }
 .lang-sw button.on { background: var(--primary-container); color: var(--on-primary-container); }
 .who-page .lang-sw { margin: 22px auto 0; display: flex; width: max-content; }
+.welcome.pinned .welcome-timer { opacity: 0; transition: opacity .2s; }
+.welcome-card { cursor: pointer; }

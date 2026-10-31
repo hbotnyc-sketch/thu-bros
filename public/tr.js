@@ -70,6 +70,8 @@ export const TR = {
   "Send feedback & ideas": "Fikir ve geri bildirim gönder",
   "Add Thursday Bros to your home screen": "Thursday Bros'u ana ekrana ekle",
   "Opens like an app, one tap away": "Uygulama gibi açılır, tek dokunuş", "Install": "Yükle", "How?": "Nasıl?",
+  "Hold the card to keep reading · tap outside to continue": "Okumak için karta basılı tut · devam etmek için dışarı dokun",
+  "Tap outside to continue": "Devam etmek için dışarı dokun",
   // profile: language + notifications
   "Language": "Dil",
   "· on": "· açık", "Turn on notifications": "Bildirimleri aç", "Send me a test": "Bana test gönder", "Turn off": "Kapat",

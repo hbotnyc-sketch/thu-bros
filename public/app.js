@@ -1,6 +1,6 @@
 // Thursday Bros — single-page client. No framework: state → render() → event delegation.
 import { HADITHS } from "./hadiths.js";
-import { T, P, LANG, loc, setLang } from "./i18n.js?v=11";
+import { T, P, LANG, loc, setLang } from "./i18n.js?v=12";
 import { applyAction as demoApply, advance as demoAdvance, view as demoView } from "./core.mjs";
 
 /* ---------- visitor preview mode (/?demo): live data, every action stays in this browser ---------- */
@@ -2093,10 +2093,12 @@ function showError(msg) {
 function maybeTour() { if (me && member(me) && !tourDone()) setTimeout(() => startTour(), 350); }
 function showWelcomeHadith() {
   try { if (sessionStorage.getItem("tb.welcomed")) return maybeTour(); sessionStorage.setItem("tb.welcomed", "1"); } catch {}
-  let last = -1; try { last = +(localStorage.getItem("tb.lastHadith") ?? -1); } catch {}
-  let i = Math.floor(Math.random() * HADITHS.length);
-  if (i === last) i = (i + 1) % HADITHS.length;
-  try { localStorage.setItem("tb.lastHadith", String(i)); } catch {}
+  // Shuffle bag: every hadith shows once before any repeats.
+  let seen = []; try { seen = JSON.parse(localStorage.getItem("tb.seenHadiths") || "[]").filter((x) => x < HADITHS.length); } catch {}
+  let pool = HADITHS.map((_, k) => k).filter((k) => !seen.includes(k));
+  if (!pool.length) { const lastOne = seen.at(-1); seen = []; pool = HADITHS.map((_, k) => k).filter((k) => k !== lastOne); }
+  const i = pool[Math.floor(Math.random() * pool.length)];
+  try { localStorage.setItem("tb.seenHadiths", JSON.stringify([...seen, i])); } catch {}
   const h = HADITHS[i];
   const el = document.createElement("div");
   el.className = "welcome";
@@ -2107,12 +2109,14 @@ function showWelcomeHadith() {
       <blockquote class="welcome-q">${esc(h.t)}</blockquote>
       <div class="welcome-src">${esc(h.s)}</div>
       <div class="welcome-timer"><span></span></div>
-      <div class="welcome-hint">Tap anywhere to continue</div>
+      <div class="welcome-hint">${T("Hold the card to keep reading · tap outside to continue")}</div>
     </div>`;
   let done = false;
   const close = () => { if (done) return; done = true; el.classList.add("out"); setTimeout(() => { el.remove(); maybeTour(); }, 300); };
-  el.addEventListener("click", close);
-  setTimeout(close, 3000);
+  let timer = setTimeout(close, 3000);
+  const pin = () => { clearTimeout(timer); if (el.classList.contains("pinned")) return; el.classList.add("pinned"); el.querySelector(".welcome-hint").textContent = T("Tap outside to continue"); };
+  el.addEventListener("pointerdown", (e) => { if (e.target.closest(".welcome-card")) pin(); });
+  el.addEventListener("click", (e) => { if (!e.target.closest(".welcome-card")) close(); });
   document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", k); } });
   document.body.appendChild(el);
 }
