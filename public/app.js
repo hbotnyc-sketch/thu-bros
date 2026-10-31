@@ -1935,7 +1935,7 @@ document.addEventListener("click", async (e) => {
         else if (el.dataset.a === "pushOff") { await disablePush(); toast("Notifications off"); }
         else {
           const r = await (await fetch("/api/push/test", { method: "POST", body: JSON.stringify({ actor: me }) })).json();
-          toast(r.sent ? "Sent — it should show up in a second" : r.devices ? `Couldn't deliver (${r.lastStatus || r.error || "error"})` : "No device signed up yet");
+          toast(r.sent ? "Sent — it should show up in a second" : r.devices ? `Couldn't deliver (${r.lastStatus || r.error || "error"}${r.reason ? " " + r.reason : ""})` : "No device signed up yet");
         }
       } catch (err) { toast(err.message); if (el) el.disabled = false; }
       const st = await pushState();
