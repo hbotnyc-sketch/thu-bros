@@ -1,6 +1,6 @@
 // Thursday Bros — single-page client. No framework: state → render() → event delegation.
 import { HADITHS } from "./hadiths.js";
-import { T, P, LANG, loc, setLang } from "./i18n.js?v=13";
+import { T, P, LANG, loc, setLang } from "./i18n.js?v=14";
 import { applyAction as demoApply, advance as demoAdvance, view as demoView } from "./core.mjs";
 
 /* ---------- visitor preview mode (/?demo): live data, every action stays in this browser ---------- */
@@ -319,7 +319,7 @@ function render() {
       <div class="foot">
         ${DEMO ? "" : installBar()}
         <button class="btn outlined" data-a="feedback">${ic("chat")} ${T("Send feedback & ideas")}${(S.state.feedback || []).length ? ` <span class="muted small">· ${(S.state.feedback || []).length}</span>` : ""}</button>
-        <p class="foot-note">Selam, ${esc(nameOf(me))} · Allah kabul etsin</p>
+        <p class="foot-note">${esc(T("Selam, {n} · Allah kabul etsin", { n: nameOf(me) }))}</p>
       </div>
     </main>`;
 }
@@ -339,7 +339,7 @@ function renderHostPrompt() {
   if (h.id !== me || h.confirmed) return "";
   return `<section class="hero warn">
     <div class="deco">${ic("home")}</div>
-    <span class="chip">${ic("home")} Yemek sırası</span>
+    <span class="chip">${ic("home")} ${T("Yemek sırası")}</span>
     <h2>${skipped.length ? esc(T("{names} can't host this week — can you host on {day}?", { names: skipped.map(nameOf).join(", "), day })) : esc(T("You're hosting on {day} 🏠", { day }))}</h2>
     <p>${skipped.length ? T("If you can't either, it'll ask the next person in the order.") : T("Please confirm and share the address and any details: gate code, parking, food…")}</p>
     <div class="row">
@@ -404,7 +404,7 @@ function renderThursday(w) {
     : `${T("Waiting to confirm")}${skipped.length ? esc(T(" · covering for {names}", { names: skipped.map(nameOf).join(", ") })) : h.changed ? T(" · swapped") : ""}`;
   const hostAct = !h ? "" : !h.confirmed && h.id !== me
     ? `<button type="button" class="btn text small" data-a="personShare" data-id="${h.id}" data-kind="host">${ic("chat")} ${T("Remind")}</button>`
-    : `<button class="btn text small" data-a="rota">Sıra</button>`;
+    : `<button class="btn text small" data-a="rota">${T("Sıra")}</button>`;
   return `<section class="card thu">
     <div class="thu-h">
       <div class="grow"><div class="kicker">${kicker}</div>
@@ -621,7 +621,7 @@ function archiveRows() {
 }
 function renderArchive() {
   if (!pastWeeks().length) return "";
-  return `<section class="archive"><h2>Geçmiş sohbetler</h2>
+  return `<section class="archive"><h2>${T("Geçmiş sohbetler")}</h2>
     <div class="picker-box search">${ic("search")}<input type="search" id="arch-q" placeholder="${T("Search topics, tags, names…")}" value="${esc(archiveQ)}" aria-label="Search past sohbets" /></div>
     <ul class="list" id="arch-list">${archiveRows()}</ul></section>`;
 }
@@ -776,7 +776,8 @@ function confirmHostSheet(w) {
 function langSwitch() {
   return `<div class="lang-sw" role="group" aria-label="Dil / Language">
     <button type="button" class="${LANG === "en" ? "on" : ""}" data-a="lang" data-l="en" aria-pressed="${LANG === "en"}">English</button>
-    <button type="button" class="${LANG === "tr" ? "on" : ""}" data-a="lang" data-l="tr" aria-pressed="${LANG === "tr"}">Türkçe</button></div>`;
+    <button type="button" class="${LANG === "tr" ? "on" : ""}" data-a="lang" data-l="tr" aria-pressed="${LANG === "tr"}">Türkçe</button>
+    <button type="button" class="${LANG === "mix" ? "on" : ""}" data-a="lang" data-l="mix" aria-pressed="${LANG === "mix"}">Mix</button></div>`;
 }
 
 /* ---------- push notifications (v1.2) ---------- */
@@ -2106,7 +2107,7 @@ function showWelcomeHadith() {
   el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Hadis");
   el.innerHTML = `<div class="welcome-card">
       <div class="welcome-mark">${logo()}</div>
-      <div class="welcome-lbl">Hz. Peygamber (s.a.v.) buyurdu:</div>
+      <div class="welcome-lbl">${T("Hz. Peygamber (s.a.v.) buyurdu:")}</div>
       <blockquote class="welcome-q">${esc(h.t)}</blockquote>
       <div class="welcome-src">${esc(h.s)}</div>
       <div class="welcome-timer"><span></span></div>

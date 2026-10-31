@@ -1,0 +1,21 @@
+// Full English: replaces the Turkish terms of the original ("mix") wording. Key = the text used in the code.
+export const EN = {
+  "Add hadis": "Add hadith", "Add sohbet topic": "Add discussion topic",
+  "Any short iman topic is perfect — 10–15 minutes. If you can't, it passes to the next person.": "Any short topic on faith is perfect — 10–15 minutes. If you can't, it passes to the next person.",
+  "During or after the sohbet: record it, upload audio, paste a transcript, or type notes. It all goes into Geçmiş sohbetler.": "During or after the gathering: record it, upload audio, paste a transcript, or type notes. It all goes into Past gatherings.",
+  "Everyone in the yemek sırası has passed this week. Can you host?": "Everyone in the meal order has passed this week. Can you host?",
+  "Gelemiyorum": "Can't make it", "Geliyorum": "I'm coming",
+  "Hadis": "Hadith", "Next sohbet": "Next gathering", "No past sohbets yet.": "No past gatherings yet.",
+  "No sohbet": "No gathering", "No sohbet this week.": "No gathering this week.",
+  "Notes · skim before sohbet": "Notes · skim before the gathering", "Prep notes · skim before sohbet": "Prep notes · skim before the gathering",
+  "Notlar · Recap": "Notes · Recap", "Record sohbet": "Record the gathering",
+  "See the sunum resources": "See the talk resources", "Set sırası": "Set the order",
+  "Sohbet": "Discussion", "Sunum": "Talk", "Sunum open": "Talk open", "Sunum still open": "Talk still open", "Sunum taken": "Talk taken", "Sunum · {n}": "Talk · {n}",
+  "weekly sohbet": "weekly gathering",
+  "{n} will post this week's hadis here.": "{n} will post this week's hadith here.",
+  "{n} will share the sohbet topic and notes here before Thursday.": "{n} will share the discussion topic and notes here before Thursday.",
+  "Geçmiş sohbetler": "Past gatherings", "Yemek sırası": "Meal order", "Sıra": "Order",
+  "Hz. Peygamber (s.a.v.) buyurdu:": "The Prophet ﷺ said:",
+  "Selam, {n} · Allah kabul etsin": "Salam, {n} · May Allah accept it",
+  "Esma-ül Hüsna": "Names of Allah", "Ayet / Sure": "Ayah / Surah", "Siyer / Event": "Seerah / Event", "Daily iman": "Daily faith",
+};

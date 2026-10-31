@@ -50,13 +50,18 @@ delegation (`data-a="action"`), bottom sheets via `openSheet()`.
 - Don't touch real data; use the dev server for experiments.
 - Commit small, clear messages.
 
-## Language (EN | TR)
-`public/i18n.js` + `public/tr.js`. The English text in code is the key: wrap UI strings in `T("English text")`
-(`T("{n} left", { n })` for variables). Missing Turkish falls back to English. Default is EN ("as is"); users
-switch in the sign-in screen or Profile; `?lang=tr` previews. TR voice: warm friend in the group, "sen", short,
-Islamic phrases only where natural. Same word for the same thing (ev sahibi, sunum, sohbet, hadis, Geliyorum / Gelemiyorum, Sıra).
+## Language (English | Türkçe | Mix)
+`public/i18n.js`, `public/en.js`, `public/tr.js`. Three versions of the same app, chosen on the sign-in screen
+or in Profile (`?lang=en|tr|mix` previews):
+- **Mix** (default, the original): English with Turkish terms (Hadis, Sohbet, Sunum, Geliyorum, Sıra).
+- **English**: full English; `en.js` replaces the Turkish terms (Hadith, Discussion, Talk, I'm coming...).
+- **Türkçe**: full Turkish; `tr.js`.
+The Mix English text in the code is the key: wrap UI strings in `T("Mix text")` (`T("{n} left", { n })` for
+variables). Anything missing from `en.js`/`tr.js` falls back to the key. TR voice: warm friend in the group,
+"sen", short, Islamic phrases only where natural. Same word for the same thing (ev sahibi, sunum, sohbet,
+hadis, Geliyorum / Gelemiyorum, Sıra). Turkish shows full month names (Kasım).
 Translated so far: main screen. TODO: sheets/forms, toasts, tour, chat, notifications, archive, recording.
-Bump `?v=` in the `i18n.js` import inside app.js together with index.html.
+Bump the `?v=` in the `i18n.js` import inside app.js together with index.html.
 
 ## Versions
 - **v1.0** (branch `v1`): original layout.
